@@ -29,7 +29,12 @@ class TetrisEnv:
     def _n_actions(self):
         return len(self._action_set)
 
+    @property
+    def pieces(self):
+        return self.game_state.pieces
+
     def reset(self):
+        self.game_state.reinit();
         return self.game_state.simpleState(), self.game_state.info()
 
     def render(self):

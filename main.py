@@ -2,7 +2,6 @@
 
 import logging
 import random
-import math
 import time
 import shutil
 import os
@@ -35,6 +34,8 @@ def log_duration(func):
     return wrapper
 
 
+# Represents an entry in the agent's memory, contains a state, the following
+# state and the reward received in the transition
 class MemoryEntry:
     def __init__(self, info, next_info, reward):
         self.info = info
@@ -45,6 +46,7 @@ class MemoryEntry:
         return str((self.info['board'], self.reward))
 
 
+# A start and reward pair
 class PastState:
     def __init__(self, info, reward):
         self.info = info
@@ -54,20 +56,24 @@ class PastState:
         return str((self.info['board'], self.reward))
 
 
+# An agent that can lean and play tetris. It learns via reinforcement learning
+# and its model is a multi convolutional neural layer net. The model predicts
+# the total future reward from a given board configuration without regarding to
+# curently active piece, so it is used to pick where to place each piece
+# instead of using it to control the piece at every step. The later would be
+# harder to train while the algorithm to control the piece is easy to do
+# using more traditional methods, ie, BFS.
 class NNAgent():
     def __init__(self, state_shape, action_size):
         self.learning_rate = 0.001
         self.state_shape = state_shape
         self.action_size = action_size
-        self.gamma = 0.99
+        self.gamma = 0.999
         self.e = 0.01
         self.cache = {}
 
         board_shape = state_shape[:2]
         self.board_shape = board_shape
-
-        self.unroll = 1
-        self.gamma_unrolled = math.pow(self.gamma, self.unroll)
 
         model = Sequential()
         model.add(Reshape(list(board_shape) + [1], input_shape=board_shape))
@@ -84,9 +90,9 @@ class NNAgent():
         model.add(MaxPooling2D())
         model.add(Dropout(0.5))
         model.add(Flatten())
-        model.add(Dense(1024, activation='relu', kernel_regularizer='l2'))
-        model.add(Dense(1024, activation='relu', kernel_regularizer='l2'))
-        model.add(Dense(1, activation='linear', kernel_regularizer='l2'))
+        model.add(Dense(1024, activation='relu'))
+        model.add(Dense(1024, activation='relu'))
+        model.add(Dense(1, activation='linear'))
         model.compile(loss='mse',
                       optimizer=Adam(lr=self.learning_rate))
 
@@ -96,6 +102,7 @@ class NNAgent():
 
         self.history = []
 
+    # Add a full game to its memory, a game is a sequence of state-reward pairs.
     def remember(self, history: [PastState]):
         filtered_history = []
         for record in history:
@@ -105,7 +112,7 @@ class NNAgent():
         history = filtered_history
 
         for i, record in enumerate(history):
-            n = min(i + self.unroll, len(history))
+            n = min(i + 1, len(history))
 
             reward = 0
             for j in range(n-1, i-1, -1):
@@ -117,7 +124,11 @@ class NNAgent():
             self.history.append(
                 MemoryEntry(record.info, next_info, reward))
 
-    def move_info(self, info, randomize=False):
+    # Pick a move given the game state, the move is selected by listing out all
+    # possible places to place the current piece and evaluating the resulting
+    # board with the neural net, it returns the movement that leads to the
+    # state which maximize the predicted future total reward.
+    def move(self, info, randomize=False):
         if 'piece_shape' not in info:
             return 'DOWN', self._eval(info['board'])
 
@@ -187,24 +198,25 @@ class NNAgent():
         return out
 
     @log_duration
-    def replay_score(self, batch_size):
+    def learn(self, batch_size):
         if not self.history:
             return
         batch = random.sample(self.history, min(len(self.history), batch_size))
         features = np.array([entry.info['board'] for entry in batch])
-        features_next = np.array([entry.next_info['board'] if entry.next_info is not None
-                                  else np.zeros(self.board_shape) for entry in batch])
+        features_next = np.array(
+            [entry.next_info['board'] if entry.next_info is not None
+             else np.zeros(self.board_shape) for entry in batch])
 
         predictions = self._eval_many(features_next)
         target = np.zeros(predictions.shape)
         for i, pred in enumerate(predictions):
             nextq = pred if batch[i].next_info is not None else 0
-            target[i] = batch[i].reward + self.gamma_unrolled * nextq
+            target[i] = batch[i].reward + self.gamma * nextq
 
         features = self._make_features(features)
 
         self.value_model.fit(features, target, epochs=1,
-                             verbose=0, batch_size=64)
+                             verbose=0, batch_size=batch_size)
 
 
 @log_duration
@@ -217,18 +229,16 @@ def run_episode(env, agent, demo):
 
     for _ in range(10000000):
         # move, dist = agent.move(state, True)
-        action, _ = agent.move_info(info, not demo)
+        action, action_score = agent.move(info, not demo)
 
         if demo:
             env.render()
 
         _, reward, done, next_info = env.step(ACTION_MAP[action])
 
-        # if demo:
-        #     print('='*80)
-        #     print(state.sum(axis=2))
-        #     print(next_state.sum(axis=2))
-        #     print(action, reward, score)
+        if demo:
+            print('='*80)
+            print(action, action_score)
 
         total_reward += reward
 
@@ -244,9 +254,7 @@ def run_episode(env, agent, demo):
 
     agent.remember(history)
 
-    agent.replay_score(128)
-
-    return total_reward, history
+    return total_reward, history, env.pieces
 
 
 def rmtree(path):
@@ -258,10 +266,6 @@ def rmtree(path):
 
 def main():
 
-    # env = gym.make('CartPole-v1')
-    # env = gym.make('MountainCar-v0')
-    # env = gym.make('Acrobot-v1')
-
     env = TetrisEnv()
 
     # logging.basicConfig(
@@ -271,8 +275,8 @@ def main():
     state_shape = env.observation_space.shape
     action_size = env.action_space.n
 
-    print(state_shape)
-    print(action_size)
+    print('State shape: {}'.format(state_shape))
+    print('Action size: {}'.format(action_size))
 
     agent = NNAgent(state_shape, action_size)
 
@@ -289,14 +293,15 @@ def main():
             now = time.time()
             demo = (now - last_demo > 30)
 
-            total_reward, history = run_episode(env, agent, demo)
+            total_reward, history, dropped_pieces = run_episode(
+                env, agent, demo)
 
             is_best = False
-            if total_reward > best_episode:
-                best_episode = total_reward
+            if dropped_pieces > best_episode:
+                best_episode = dropped_pieces
                 is_best = True
 
-            window.append(total_reward)
+            window.append(dropped_pieces)
             if len(window) > 100:
                 window.pop(0)
 
@@ -305,7 +310,7 @@ def main():
                 m = np.mean(window)
                 best_window = max(best_window, m)
                 print("{}: Episode finished with reward {}" ", moving average: {:.2f}, best average: {:.2f}, best episode: {}".format(
-                    i_episode, total_reward, m, best_window, best_episode))
+                    i_episode, dropped_pieces, m, best_window, best_episode))
                 last_summary = time.time()
 
             if demo:
@@ -321,6 +326,7 @@ def main():
                     im = Image.fromarray(img)
                     im.save('{}/step_{:06d}.png'.format(d, i))
 
+            agent.learn(1 << 14)
 
     except KeyboardInterrupt:
         pass

@@ -180,6 +180,7 @@ class GameState:
         self.score = 0
         self.lines = 0
         self.height = 0
+        self.pieces = 0
 
         self.fallingPiece = self.getNewPiece()
         self.nextPiece = self.getNewPiece()
@@ -196,6 +197,15 @@ class GameState:
         self.score = 0
         self.lines = 0
         self.height = 0
+        self.pieces = 0
+
+        self.fallingPiece = self.getNewPiece()
+        self.nextPiece = self.getNewPiece()
+
+        self.frame_step([1, 0, 0, 0, 0, 0])
+
+        pygame.display.update()
+
 
         self.fallingPiece = self.getNewPiece()
         self.nextPiece = self.getNewPiece()
@@ -264,12 +274,14 @@ class GameState:
             self.addToBoard()
 
             cleared = self.removeCompleteLines()
-            reward = 1 + cleared * 0
+            reward = 1 + cleared * 10
 
             self.lines += cleared
             self.total_lines += cleared
 
             self.height = self.getHeight()
+
+            self.pieces += 1
 
             self.fallingPiece = self.nextPiece
             self.nextPiece = self.getNewPiece()
@@ -277,7 +289,6 @@ class GameState:
             if not self.isValidPosition():
                 image_data = self.simpleState()
 
-                self.reinit()
                 # can't fit a new piece on the self.board, so game over
                 return image_data, reward, True, self.info()
 

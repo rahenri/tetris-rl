@@ -303,7 +303,7 @@ class Board:
         return self.done
 
     def reward(self):
-        return (1 * self.cleared * 0) if self.is_done() else 0
+        return (1 + self.cleared * 10) if self.is_done() else 0
 
     def tup(self):
         return (self.x, self.y, self.rotation, self.done)
