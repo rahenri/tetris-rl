@@ -1,17 +1,28 @@
 import numpy as np
-from gym import spaces
 import tetris_engine as game
 
 
-class TetrisEnv:
-    metadata = {'render.modes': ['human', 'rgb_array']}
+class Discrete:
+    def __init__(self, n):
+        self.n = n
 
+
+class Box:
+    def __init__(self, low, high, shape, dtype):
+        self.low = low
+        self.high = high
+        self.shape = shape
+        self.dtype = dtype
+
+
+class TetrisEnv:
     def __init__(self):
         # open up a game state to communicate with emulator
         self.game_state = game.GameState()
         self._action_set = self.game_state.getActionSet()
-        self.action_space = spaces.Discrete(len(self._action_set))
-        self.observation_space = spaces.Box(
+
+        self.action_space = Discrete(len(self._action_set))
+        self.observation_space = Box(
             low=0,
             high=255,
             shape=self.game_state.getObservationDim(),
@@ -34,7 +45,7 @@ class TetrisEnv:
         return self.game_state.pieces
 
     def reset(self):
-        self.game_state.reinit();
+        self.game_state.reinit()
         return self.game_state.simpleState(), self.game_state.info()
 
     def render(self):
