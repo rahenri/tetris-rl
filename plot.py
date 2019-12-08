@@ -2,8 +2,11 @@
 
 
 import argparse
-import matplotlib.pyplot as plt
 import json
+
+import matplotlib.pyplot as plt
+import mplcursors
+import numpy as np
 
 
 def main():
@@ -19,8 +22,10 @@ def main():
                 record = json.loads(line)
                 episode_numbers.append(record["episode"])
                 pieces.append(record["dropped_pieces"])
-        plt.plot(episode_numbers, pieces)
+        plt.plot(episode_numbers, np.log(pieces))
         plt.title(filename)
+
+    mplcursors.cursor(hover=True)
     plt.show()
 
 
