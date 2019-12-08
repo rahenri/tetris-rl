@@ -271,8 +271,10 @@ def rmtree(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--episodes", default=100, help="Number of episodes to run")
-    parser.add_argument("--output-dir", help="Directory for output files")
+    parser.add_argument(
+        "--episodes", default=100, type=int, help="Number of episodes to run"
+    )
+    parser.add_argument("--output-dir", type=str, help="Directory for output files")
     args = parser.parse_args()
 
     episodes = args.episodes
