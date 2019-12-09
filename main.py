@@ -104,6 +104,7 @@ class NNAgent:
 
     # Add a full game to its memory, a game is a sequence of state-reward pairs.
     def remember(self, history: [PastState]):
+        # Why do I filter zero reward stuff?
         filtered_history = []
         for record in history:
             if record.reward == 0:
@@ -112,16 +113,10 @@ class NNAgent:
         history = filtered_history
 
         for i, record in enumerate(history):
-            n = min(i + 1, len(history))
+            next_i = i + 1
+            next_info = history[next_i].info if next_i < len(history) else None
 
-            reward = 0
-            for j in range(n - 1, i - 1, -1):
-                r = history[j]
-                reward = r.reward + self.gamma * reward
-
-            next_info = history[n].info if n < len(history) else None
-
-            self.history.append(MemoryEntry(record.info, next_info, reward))
+            self.history.append(MemoryEntry(record.info, next_info, record.reward))
 
     # Pick a move given the game state, the move is selected by listing out all
     # possible places to place the current piece and evaluating the resulting
@@ -233,7 +228,6 @@ def run_episode(env, agent, demo):
     history = []
 
     for _ in range(10000000):
-        # move, dist = agent.move(state, True)
         action, action_score = agent.move(info, not demo)
 
         if demo:
@@ -262,9 +256,9 @@ def run_episode(env, agent, demo):
     return total_reward, history, env.pieces
 
 
-def rmtree(path):
+def rmtree(dirpath):
     try:
-        shutil.rmtree(path)
+        shutil.rmtree(dirpath)
     except FileNotFoundError:
         pass
 
