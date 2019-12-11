@@ -4,24 +4,31 @@ import argparse
 import json
 import logging
 import os
+from os import path
 import random
 import shutil
 import time
-from os import path
+
 
 from PIL import Image
 
-from keras.models import Sequential
-from keras.layers import Dense, Conv2D, Flatten, MaxPooling2D, Dropout, Reshape
-from keras.optimizers import Adam
-from keras import backend as K
+import tensorflow as tf
+
+from tensorflow.keras.layers import (
+    Dense,
+    Flatten,
+    Conv2D,
+    MaxPooling2D,
+    Dropout,
+    Reshape,
+)
+from tensorflow.keras import Model
+
 
 import numpy as np
 
 from tetris_env import TetrisEnv
 from board import Board, ACTION_MAP
-
-print(K.tensorflow_backend._get_available_gpus())
 
 
 def log_duration(func):
@@ -57,6 +64,36 @@ class PastState:
         return str((self.info["board"], self.reward))
 
 
+class AgentModel(Model):
+    def __init__(self, board_shape):
+        super().__init__()
+
+        self._layers = [
+            Reshape(list(board_shape) + [1], input_shape=board_shape),
+            Conv2D(32, 3, padding="same", activation="relu"),
+            Conv2D(32, 3, padding="same", activation="relu"),
+            MaxPooling2D(),
+            Dropout(0.5),
+            Conv2D(64, 3, padding="same", activation="relu"),
+            Conv2D(64, 3, padding="same", activation="relu"),
+            MaxPooling2D(),
+            Dropout(0.5),
+            Conv2D(128, 3, padding="same", activation="relu"),
+            Conv2D(128, 3, padding="same", activation="relu"),
+            MaxPooling2D(),
+            Dropout(0.5),
+            Flatten(),
+            Dense(1024, activation="relu"),
+            Dense(1024, activation="relu"),
+            Dense(1, activation="linear"),
+        ]
+
+    def call(self, x, training=False):
+        for layer in self._layers:
+            x = layer(x, training=training)
+        return x
+
+
 # An agent that can lean and play tetris. It learns via reinforcement learning
 # and its model is a multi convolutional neural layer net. The model predicts
 # the total future reward from a given board configuration without regarding to
@@ -76,29 +113,9 @@ class NNAgent:
         board_shape = state_shape[:2]
         self.board_shape = board_shape
 
-        model = Sequential()
-        model.add(Reshape(list(board_shape) + [1], input_shape=board_shape))
-        model.add(Conv2D(32, 3, padding="same", activation="relu"))
-        model.add(Conv2D(32, 3, padding="same", activation="relu"))
-        model.add(MaxPooling2D())
-        model.add(Dropout(0.5))
-        model.add(Conv2D(64, 3, padding="same", activation="relu"))
-        model.add(Conv2D(64, 3, padding="same", activation="relu"))
-        model.add(MaxPooling2D())
-        model.add(Dropout(0.5))
-        model.add(Conv2D(128, 3, padding="same", activation="relu"))
-        model.add(Conv2D(128, 3, padding="same", activation="relu"))
-        model.add(MaxPooling2D())
-        model.add(Dropout(0.5))
-        model.add(Flatten())
-        model.add(Dense(1024, activation="relu"))
-        model.add(Dense(1024, activation="relu"))
-        model.add(Dense(1, activation="linear"))
-        model.compile(loss="mse", optimizer=Adam(lr=self.learning_rate))
-
-        print(model.summary())
-
-        self.value_model = model
+        self.value_model = AgentModel(board_shape)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        self.loss_function = tf.keras.losses.MeanSquaredError()
 
         self.history = []
 
@@ -152,7 +169,7 @@ class NNAgent:
             boards.append(node.board)
             rewards.append(node.reward())
 
-        boards = np.array(boards)
+        boards = np.array(boards, dtype=np.float32)
         scores = self._eval_many(boards)
 
         best_end = None
@@ -182,41 +199,47 @@ class NNAgent:
     def _eval(self, board):
         return self._eval_many(np.array([board]))[0]
 
-    def _make_features(self, boards):
-        return boards
-
     def _eval_many(self, boards):
-        features = self._make_features(boards)
-        out = self.value_model.predict(features).reshape([-1])
-        assert len(out) == len(boards)
-        return out
+        boards = tf.convert_to_tensor(boards, dtype=np.float32)
+        return self.value_model(boards).numpy().reshape(-1)
+
+    def _make_features(self, batch_size):
+        batch = random.sample(self.history, min(len(self.history), batch_size))
+        features = tf.convert_to_tensor(
+            [entry.info["board"] for entry in batch], dtype=np.float32
+        )
+        zeros = np.zeros(self.board_shape)
+        features_next = tf.convert_to_tensor(
+            [
+                entry.next_info["board"] if entry.next_info is not None else zeros
+                for entry in batch
+            ],
+            dtype=np.float32,
+        )
+
+        predictions = self.value_model(features_next).numpy().reshape(-1)
+        target = np.zeros(predictions.shape)
+        for i, pred in enumerate(predictions):
+            nextq = pred if batch[i].next_info is not None else 0
+            target[i] = batch[i].reward + self.gamma * nextq
+        target = tf.convert_to_tensor(target.reshape([-1, 1]), dtype=np.float32)
+
+        return features, target
 
     @log_duration
     def learn(self, batch_size):
         if not self.history:
             return
-        batch = random.sample(self.history, min(len(self.history), batch_size))
-        features = np.array([entry.info["board"] for entry in batch])
-        features_next = np.array(
-            [
-                entry.next_info["board"]
-                if entry.next_info is not None
-                else np.zeros(self.board_shape)
-                for entry in batch
-            ]
+        features, target = self._make_features(batch_size)
+
+        with tf.GradientTape() as tape:
+            predicions = self.value_model(features, training=True)
+            loss = self.loss_function(target, predicions)
+        gradients = tape.gradient(loss, self.value_model.trainable_variables)
+        self.optimizer.apply_gradients(
+            zip(gradients, self.value_model.trainable_variables)
         )
-
-        predictions = self._eval_many(features_next)
-        target = np.zeros(predictions.shape)
-        for i, pred in enumerate(predictions):
-            nextq = pred if batch[i].next_info is not None else 0
-            target[i] = batch[i].reward + self.gamma * nextq
-
-        features = self._make_features(features)
-
-        self.value_model.fit(
-            features, target, epochs=1, verbose=0, batch_size=batch_size
-        )
+        return loss.numpy()
 
 
 @log_duration
@@ -228,16 +251,12 @@ def run_episode(env, agent, demo):
     history = []
 
     for _ in range(10000000):
-        action, action_score = agent.move(info, not demo)
+        action, _action_score = agent.move(info, not demo)
 
         if demo:
             env.render()
 
         _, reward, done, next_info = env.step(ACTION_MAP[action])
-
-        if demo:
-            print("=" * 80)
-            print(action, action_score)
 
         total_reward += reward
 
@@ -320,26 +339,6 @@ def main():
                 if len(window) > 100:
                     window.pop(0)
 
-                now = time.time()
-                if now - last_summary > summary_every_sec:
-                    m = np.mean(window)
-                    best_window = max(best_window, m)
-                    print(
-                        "{}: Episode finished with reward {}"
-                        ", moving average: {:.2f}, best average: {:.2f}, best episode: {}".format(
-                            i_episode, dropped_pieces, m, best_window, best_episode
-                        )
-                    )
-                    last_summary = time.time()
-
-                output = {
-                    "episode": i_episode,
-                    "dropped_pieces": dropped_pieces,
-                    "reward": total_reward,
-                }
-                output_log.write(json.dumps(output) + "\n")
-                output_log.flush()
-
                 if demo:
                     last_demo = time.time()
 
@@ -353,7 +352,33 @@ def main():
                         im = Image.fromarray(img)
                         im.save(path.join(d, "step_{:06d}.png".format(i)))
 
-                agent.learn(1 << 14)
+                loss = agent.learn(1 << 14)
+
+                now = time.time()
+                if now - last_summary > summary_every_sec:
+                    m = np.mean(window)
+                    best_window = max(best_window, m)
+                    print(
+                        "{}: Episode finished with reward {}"
+                        ", moving average: {:.2f}, best average: {:.2f}, best episode: {}, loss: {}".format(
+                            i_episode,
+                            dropped_pieces,
+                            m,
+                            best_window,
+                            best_episode,
+                            loss,
+                        )
+                    )
+                    last_summary = time.time()
+
+                output = {
+                    "episode": i_episode,
+                    "dropped_pieces": dropped_pieces,
+                    "reward": total_reward,
+                    "loss": float(loss),
+                }
+                output_log.write(json.dumps(output) + "\n")
+                output_log.flush()
 
         except KeyboardInterrupt:
             pass

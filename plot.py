@@ -22,8 +22,8 @@ def main():
                 record = json.loads(line)
                 episode_numbers.append(record["episode"])
                 pieces.append(record["dropped_pieces"])
-        plt.plot(episode_numbers, np.log(pieces))
-        plt.title(filename)
+        plt.plot(episode_numbers, np.log(pieces), label=filename)
+    plt.legend()
 
     mplcursors.cursor(hover=True)
     plt.show()
