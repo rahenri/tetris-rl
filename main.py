@@ -226,6 +226,12 @@ class NNAgent:
 
         return features, target
 
+    def save_model(self, filename):
+        self.value_model.save_weights(filename, save_format="tf")
+
+    def load_model(self, filename):
+        self.value_model.load_weights(filename)
+
     @log_duration
     def learn(self, batch_size):
         if not self.history:
@@ -287,12 +293,28 @@ def main():
     parser.add_argument(
         "--episodes", default=100, type=int, help="Number of episodes to run"
     )
-    parser.add_argument("--output-dir", type=str, help="Directory for output files")
+    parser.add_argument("--name", type=str, help="Name of the experiment")
+    parser.add_argument(
+        "--experiment-dir",
+        default="experiments",
+        type=str,
+        help="Directory containing experiments",
+    )
+    parser.add_argument(
+        "--load-model",
+        default=None,
+        type=str,
+        help="Experiment name to load model from",
+    )
     args = parser.parse_args()
 
     episodes = args.episodes
 
-    output_dir = args.output_dir
+    output_dir = os.path.join(args.experiment_dir, args.name)
+
+    if os.path.exists(output_dir):
+        print(f"An experiment named {args.name} already exists")
+        return
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -312,6 +334,13 @@ def main():
     print(f"Action size: {action_size}")
 
     agent = NNAgent(state_shape, action_size)
+
+    if args.load_model:
+        filename = os.path.join(
+            args.experiment_dir, args.load_model, "model_snapshots", "model.tf"
+        )
+        print(f"Loaging model from {filename}")
+        agent.load_model(filename)
 
     window = []
 
@@ -343,6 +372,9 @@ def main():
                     last_demo = time.time()
 
                 if is_best:
+                    agent.save_model(
+                        os.path.join(output_dir, "model_snapshots", f"model.tf")
+                    )
                     d = path.join(output_dir, "ep_{:05d}".format(i_episode))
                     rmtree(d)
                     os.makedirs(d, exist_ok=True)
