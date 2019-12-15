@@ -163,14 +163,17 @@ BIGFONT = None
 
 
 class GameState:
-    def __init__(self):
-        global FPSCLOCK, DISPLAYSURF, BASICFONT, BIGFONT
-        pygame.init()
-        FPSCLOCK = pygame.time.Clock()
-        DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
-        BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
-        BIGFONT = pygame.font.Font('freesansbold.ttf', 100)
-        pygame.display.set_caption('Tetromino')
+    def __init__(self, gui=False):
+        self.gui = gui
+
+        if gui:
+            global FPSCLOCK, DISPLAYSURF, BASICFONT, BIGFONT
+            pygame.init()
+            FPSCLOCK = pygame.time.Clock()
+            DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
+            BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
+            BIGFONT = pygame.font.Font('freesansbold.ttf', 100)
+            pygame.display.set_caption('Tetromino')
 
         # DEBUG
         self.total_lines = 0
@@ -187,7 +190,8 @@ class GameState:
 
         self.frame_step([1, 0, 0, 0, 0, 0])
 
-        pygame.display.update()
+        if gui:
+            pygame.display.update()
 
     def getObservationDim(self):
         return (BOARDHEIGHT, BOARDWIDTH, 2)
@@ -204,7 +208,8 @@ class GameState:
 
         self.frame_step([1, 0, 0, 0, 0, 0])
 
-        pygame.display.update()
+        if self.gui:
+            pygame.display.update()
 
 
         self.fallingPiece = self.getNewPiece()
@@ -212,7 +217,8 @@ class GameState:
 
         self.frame_step([1, 0, 0, 0, 0, 0])
 
-        pygame.display.update()
+        if self.gui:
+            pygame.display.update()
 
     def frame_step(self, input):
         did_move = False
@@ -292,35 +298,38 @@ class GameState:
                 # can't fit a new piece on the self.board, so game over
                 return image_data, reward, True, self.info()
 
-        # image_data = pygame.surfarray.array3d(pygame.display.get_surface())
         image_data = self.simpleState()
         return image_data, reward, False, self.info()
 
     def _render(self, board, falling_piece):
-        DISPLAYSURF.fill(BGCOLOR)
-        self.drawBoard(board)
-        if falling_piece:
-            self.drawPiece(falling_piece)
-        pygame.display.update()
-        image_data = pygame.surfarray.array3d(
-            pygame.transform.rotate(pygame.display.get_surface(), 90))
-        return image_data
+        if self.gui:
+            DISPLAYSURF.fill(BGCOLOR)
+            self.drawBoard(board)
+            if falling_piece:
+                self.drawPiece(falling_piece)
+            pygame.display.update()
+            image_data = pygame.surfarray.array3d(
+                pygame.transform.rotate(pygame.display.get_surface(), 90))
+            return image_data
+        return None
 
     def getImage(self):
         return self._render(self.board, self.fallingPiece)
 
     def get_info_image(self, info):
-        DISPLAYSURF.fill(BGCOLOR)
-        piece = None
-        if 'piece_shape' in info:
-            piece = {
-                'shape': info['piece_shape'],
-                'x': info['piece_x'],
-                'y': info['piece_y'],
-                'rotation': info['piece_rotation'],
-                'color': info['piece_color'],
-            }
-        return self._render(info['color_board'], piece)
+        if self.gui:
+            DISPLAYSURF.fill(BGCOLOR)
+            piece = None
+            if 'piece_shape' in info:
+                piece = {
+                    'shape': info['piece_shape'],
+                    'x': info['piece_x'],
+                    'y': info['piece_y'],
+                    'rotation': info['piece_rotation'],
+                    'color': info['piece_color'],
+                }
+            return self._render(info['color_board'], piece)
+        return None
 
     def getActionSet(self):
         return list(range(6))
@@ -412,6 +421,8 @@ class GameState:
         return (XMARGIN + (boxx * BOXSIZE)), (TOPMARGIN + (boxy * BOXSIZE))
 
     def drawBox(self, boxx, boxy, color, pixelx=None, pixely=None):
+        if not self.gui:
+            return
         # draw a single box (each tetromino piece has four boxes)
         # at xy coordinates on the self.board. Or, if pixelx & pixely
         # are specified, draw to the pixel coordinates stored in
@@ -426,6 +437,8 @@ class GameState:
             DISPLAYSURF, LIGHTCOLORS[color], (pixelx + 1, pixely + 1, BOXSIZE - 4, BOXSIZE - 4))
 
     def drawBoard(self, board):
+        if not self.gui:
+            return
         # draw the border around the self.board
         pygame.draw.rect(DISPLAYSURF, BORDERCOLOR, (XMARGIN - 3, TOPMARGIN - 7,
                                                     (BOARDWIDTH * BOXSIZE) + 8, (BOARDHEIGHT * BOXSIZE) + 8), 5)
@@ -491,6 +504,8 @@ class GameState:
         return np.array(rows, dtype='int8')
 
     def drawPiece(self, piece, pixelx=None, pixely=None):
+        if not self.gui:
+            return
         shapeToDraw = PIECES[piece['shape']][piece['rotation']]
         if pixelx == None and pixely == None:
             # if pixelx & pixely hasn't been specified, use the location stored in the piece data structure
@@ -504,6 +519,8 @@ class GameState:
                         None, None, piece['color'], pixelx + (x * BOXSIZE), pixely + (y * BOXSIZE))
 
     def drawNextPiece(self):
+        if not self.gui:
+            return
         # draw the "next" text
         nextSurf = BASICFONT.render('Next:', True, TEXTCOLOR)
         nextRect = nextSurf.get_rect()

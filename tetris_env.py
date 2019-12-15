@@ -16,9 +16,9 @@ class Box:
 
 
 class TetrisEnv:
-    def __init__(self):
+    def __init__(self, gui=False):
         # open up a game state to communicate with emulator
-        self.game_state = game.GameState()
+        self.game_state = game.GameState(gui=gui)
         self._action_set = self.game_state.getActionSet()
 
         self.action_space = Discrete(len(self._action_set))

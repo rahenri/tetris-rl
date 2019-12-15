@@ -293,7 +293,9 @@ def main():
     parser.add_argument(
         "--episodes", default=100, type=int, help="Number of episodes to run"
     )
-    parser.add_argument("--name", type=str, help="Name of the experiment")
+    parser.add_argument(
+        "--name", type=str, help="Name of the experiment", required=True
+    )
     parser.add_argument(
         "--experiment-dir",
         default="experiments",
@@ -305,6 +307,9 @@ def main():
         default=None,
         type=str,
         help="Experiment name to load model from",
+    )
+    parser.add_argument(
+        "--gui", default=False, help="Whether to show a gui", action="store_true"
     )
     args = parser.parse_args()
 
@@ -321,7 +326,7 @@ def main():
     print(f"Will run a total of {episodes} episodes")
     print(f"Writting files to {output_dir}")
 
-    env = TetrisEnv()
+    env = TetrisEnv(gui=args.gui)
 
     # logging.basicConfig(
     #     format='%(asctime)s %(filename)s:%(lineno)d %(message)s',
@@ -378,11 +383,12 @@ def main():
                     d = path.join(output_dir, "ep_{:05d}".format(i_episode))
                     rmtree(d)
                     os.makedirs(d, exist_ok=True)
-                    for i, s in enumerate(history):
-                        info = s.info
-                        img = env.render_info(info)
-                        im = Image.fromarray(img)
-                        im.save(path.join(d, "step_{:06d}.png".format(i)))
+                    if args.gui:
+                        for i, s in enumerate(history):
+                            info = s.info
+                            img = env.render_info(info)
+                            im = Image.fromarray(img)
+                            im.save(path.join(d, "step_{:06d}.png".format(i)))
 
                 loss = agent.learn(1 << 14)
 
