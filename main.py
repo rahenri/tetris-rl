@@ -29,6 +29,7 @@ import numpy as np
 
 from tetris_env import TetrisEnv
 from board import Board, ACTION_MAP
+import tetris_gui
 
 
 def log_duration(func):
@@ -249,7 +250,7 @@ class NNAgent:
 
 
 @log_duration
-def run_episode(env, agent, demo):
+def run_episode(env, agent, demo, gui):
     _, info = env.reset()
 
     total_reward = 0
@@ -259,8 +260,8 @@ def run_episode(env, agent, demo):
     for _ in range(10000000):
         action, _action_score = agent.move(info, not demo)
 
-        if demo:
-            env.render()
+        if demo and gui:
+            gui.render(info["color_board_with_falling_piece"])
 
         _, reward, done, next_info = env.step(ACTION_MAP[action])
 
@@ -326,7 +327,7 @@ def main():
     print(f"Will run a total of {episodes} episodes")
     print(f"Writting files to {output_dir}")
 
-    env = TetrisEnv(gui=args.gui)
+    env = TetrisEnv()
 
     # logging.basicConfig(
     #     format='%(asctime)s %(filename)s:%(lineno)d %(message)s',
@@ -356,13 +357,17 @@ def main():
     best_episode = 0
     summary_every_sec = 1
 
+    gui = None
+    if args.gui:
+        gui = tetris_gui.TetrisGUI()
+
     with open(path.join(output_dir, "episodes.txt"), "w") as output_log:
         try:
             for i_episode in range(episodes):
                 now = time.time()
                 demo = now - last_demo > 30
 
-                total_reward, history, dropped_pieces = run_episode(env, agent, demo)
+                total_reward, history, dropped_pieces = run_episode(env, agent, demo, gui)
 
                 is_best = False
                 if dropped_pieces > best_episode:
@@ -383,10 +388,12 @@ def main():
                     d = path.join(output_dir, "ep_{:05d}".format(i_episode))
                     rmtree(d)
                     os.makedirs(d, exist_ok=True)
-                    if args.gui:
+                    if gui:
+                        # TODO: this souldn't depend on GUI
                         for i, s in enumerate(history):
                             info = s.info
-                            img = env.render_info(info)
+                            gui.render(info["color_board_with_falling_piece"])
+                            img = gui.screenshot()
                             im = Image.fromarray(img)
                             im.save(path.join(d, "step_{:06d}.png".format(i)))
 

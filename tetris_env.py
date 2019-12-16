@@ -16,14 +16,14 @@ class Box:
 
 
 class TetrisEnv:
-    def __init__(self, gui=False):
+    def __init__(self):
         # open up a game state to communicate with emulator
-        self.game_state = game.GameState(gui=gui)
-        self._action_set = self.game_state.getActionSet()
+        self.game_state = game.GameState()
+        self._action_set = self.game_state.get_action_set()
 
         self.action_space = Discrete(len(self._action_set))
         self.observation_space = Box(
-            low=0, high=255, shape=self.game_state.getObservationDim(), dtype=int
+            low=0, high=255, shape=self.game_state.get_observation_dim(), dtype=int
         )
         self._seed = 0
 
@@ -43,10 +43,4 @@ class TetrisEnv:
 
     def reset(self):
         self.game_state.reinit()
-        return self.game_state.simpleState(), self.game_state.info()
-
-    def render(self):
-        return self.game_state.getImage()
-
-    def render_info(self, info):
-        return self.game_state.get_info_image(info)
+        return self.game_state.simple_state(), self.game_state.info()
