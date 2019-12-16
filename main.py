@@ -8,9 +8,9 @@ from os import path
 import random
 import shutil
 import time
+import gzip
+import sys
 
-
-from PIL import Image
 
 import tensorflow as tf
 
@@ -289,7 +289,7 @@ def rmtree(dirpath):
         pass
 
 
-def main():
+def train(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--episodes", default=100, type=int, help="Number of episodes to run"
@@ -312,7 +312,7 @@ def main():
     parser.add_argument(
         "--gui", default=False, help="Whether to show a gui", action="store_true"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     episodes = args.episodes
 
@@ -367,7 +367,9 @@ def main():
                 now = time.time()
                 demo = now - last_demo > 30
 
-                total_reward, history, dropped_pieces = run_episode(env, agent, demo, gui)
+                total_reward, history, dropped_pieces = run_episode(
+                    env, agent, demo, gui
+                )
 
                 is_best = False
                 if dropped_pieces > best_episode:
@@ -385,17 +387,12 @@ def main():
                     agent.save_model(
                         os.path.join(output_dir, "model_snapshots", f"model.tf")
                     )
-                    d = path.join(output_dir, "ep_{:05d}".format(i_episode))
-                    rmtree(d)
-                    os.makedirs(d, exist_ok=True)
-                    if gui:
-                        # TODO: this souldn't depend on GUI
-                        for i, s in enumerate(history):
-                            info = s.info
-                            gui.render(info["color_board_with_falling_piece"])
-                            img = gui.screenshot()
-                            im = Image.fromarray(img)
-                            im.save(path.join(d, "step_{:06d}.png".format(i)))
+                    d = path.join(output_dir, "ep_{:05d}.json.gz".format(i_episode))
+                    with gzip.open(d, "wt") as f:
+                        json.dump(
+                            [h.info["color_board_with_falling_piece"] for h in history],
+                            f,
+                        )
 
                 loss = agent.learn(1 << 14)
 
@@ -427,6 +424,41 @@ def main():
 
         except KeyboardInterrupt:
             pass
+
+
+def view(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", help="Filename to visualize")
+    parser.add_argument("--fps", type=float, default=60, help="Target fps")
+    args = parser.parse_args(argv)
+
+    fps = args.fps
+
+    with gzip.open(args.filename, "rt") as f:
+        states = json.load(f)
+
+    start = time.time()
+    gui = tetris_gui.TetrisGUI()
+    for i, state in enumerate(states):
+        gui.render(state)
+        target_timestamp = start + i / fps
+        remaining = target_timestamp - time.time()
+        if remaining > 0:
+            time.sleep(remaining)
+
+
+def main():
+    commands = {"train": train, "view": view}
+    name = sys.argv[1]
+
+    command = commands.get(name, None)
+    if command is None:
+        print(f"Invalid command {name}, available commands are:")
+        for n in commands:
+            print(f"  {n}")
+        return
+
+    command(sys.argv[2:])
 
 
 if __name__ == "__main__":
