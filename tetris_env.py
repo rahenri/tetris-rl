@@ -23,17 +23,14 @@ class TetrisEnv:
 
         self.action_space = Discrete(len(self._action_set))
         self.observation_space = Box(
-            low=0,
-            high=255,
-            shape=self.game_state.getObservationDim(),
-            dtype=int)
+            low=0, high=255, shape=self.game_state.getObservationDim(), dtype=int
+        )
         self._seed = 0
 
     def step(self, a):
         self._action_set = np.zeros([len(self._action_set)])
         self._action_set[a] = 1
-        state, reward, terminal, info = self.game_state.frame_step(
-            self._action_set)
+        state, reward, terminal, info = self.game_state.frame_step(self._action_set)
         return state, reward, terminal, info
 
     @property

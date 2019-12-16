@@ -14,7 +14,7 @@ BOARDWIDTH = 10
 BOARDHEIGHT = 24
 WINDOWWIDTH = BOXSIZE * BOARDWIDTH
 WINDOWHEIGHT = BOXSIZE * BOARDHEIGHT
-BLANK = '.'
+BLANK = "."
 
 MOVESIDEWAYSFREQ = 0.15
 MOVEDOWNFREQ = 0.1
@@ -46,115 +46,53 @@ assert len(COLORS) == len(LIGHTCOLORS)  # each color must have light color
 TEMPLATEWIDTH = 5
 TEMPLATEHEIGHT = 5
 
-S_SHAPE_TEMPLATE = [['..OO.',
-                     '.OO..',
-                     '.....',
-                     '.....',
-                     '.....'],
-                    ['..O..',
-                     '..OO.',
-                     '...O.',
-                     '.....',
-                     '.....']]
+S_SHAPE_TEMPLATE = [
+    ["..OO.", ".OO..", ".....", ".....", "....."],
+    ["..O..", "..OO.", "...O.", ".....", "....."],
+]
 
-Z_SHAPE_TEMPLATE = [['.OO..',
-                     '..OO.',
-                     '.....',
-                     '.....',
-                     '.....'],
-                    ['..O..',
-                     '.OO..',
-                     '.O...',
-                     '.....',
-                     '.....']]
+Z_SHAPE_TEMPLATE = [
+    [".OO..", "..OO.", ".....", ".....", "....."],
+    ["..O..", ".OO..", ".O...", ".....", "....."],
+]
 
-I_SHAPE_TEMPLATE = [['..O..',
-                     '..O..',
-                     '..O..',
-                     '..O..',
-                     '.....'],
-                    ['OOOO.',
-                     '.....',
-                     '.....',
-                     '.....',
-                     '.....']]
+I_SHAPE_TEMPLATE = [
+    ["..O..", "..O..", "..O..", "..O..", "....."],
+    ["OOOO.", ".....", ".....", ".....", "....."],
+]
 
-O_SHAPE_TEMPLATE = [['.OO..',
-                     '.OO..',
-                     '.....',
-                     '.....',
-                     '.....']]
+O_SHAPE_TEMPLATE = [[".OO..", ".OO..", ".....", ".....", "....."]]
 
-J_SHAPE_TEMPLATE = [['.O...',
-                     '.OOO.',
-                     '.....',
-                     '.....',
-                     '.....'],
-                    ['..OO.',
-                     '..O..',
-                     '..O..',
-                     '.....',
-                     '.....'],
-                    ['.OOO.',
-                     '...O.',
-                     '.....',
-                     '.....',
-                     '.....'],
-                    ['..O..',
-                     '..O..',
-                     '.OO..',
-                     '.....',
-                     '.....']]
+J_SHAPE_TEMPLATE = [
+    [".O...", ".OOO.", ".....", ".....", "....."],
+    ["..OO.", "..O..", "..O..", ".....", "....."],
+    [".OOO.", "...O.", ".....", ".....", "....."],
+    ["..O..", "..O..", ".OO..", ".....", "....."],
+]
 
-L_SHAPE_TEMPLATE = [['...O.',
-                     '.OOO.',
-                     '.....',
-                     '.....',
-                     '.....'],
-                    ['..O..',
-                     '..O..',
-                     '..OO.',
-                     '.....',
-                     '.....'],
-                    ['.OOO.',
-                     '.O...',
-                     '.....',
-                     '.....',
-                     '.....'],
-                    ['.OO..',
-                     '..O..',
-                     '..O..',
-                     '.....',
-                     '.....']]
+L_SHAPE_TEMPLATE = [
+    ["...O.", ".OOO.", ".....", ".....", "....."],
+    ["..O..", "..O..", "..OO.", ".....", "....."],
+    [".OOO.", ".O...", ".....", ".....", "....."],
+    [".OO..", "..O..", "..O..", ".....", "....."],
+]
 
-T_SHAPE_TEMPLATE = [['..O..',
-                     '.OOO.',
-                     '.....',
-                     '.....',
-                     '.....'],
-                    ['..O..',
-                     '..OO.',
-                     '..O..',
-                     '.....',
-                     '.....'],
-                    ['.OOO.',
-                     '..O..',
-                     '.....',
-                     '.....',
-                     '.....'],
-                    ['..O..',
-                     '.OO..',
-                     '..O..',
-                     '.....',
-                     '.....']]
+T_SHAPE_TEMPLATE = [
+    ["..O..", ".OOO.", ".....", ".....", "....."],
+    ["..O..", "..OO.", "..O..", ".....", "....."],
+    [".OOO.", "..O..", ".....", ".....", "....."],
+    ["..O..", ".OO..", "..O..", ".....", "....."],
+]
 
-PIECES = {'S': S_SHAPE_TEMPLATE,
-          'Z': Z_SHAPE_TEMPLATE,
-          'J': J_SHAPE_TEMPLATE,
-          'L': L_SHAPE_TEMPLATE,
-          'I': I_SHAPE_TEMPLATE,
-          'O': O_SHAPE_TEMPLATE,
-          'T': T_SHAPE_TEMPLATE}
+PIECES = {
+    "S": S_SHAPE_TEMPLATE,
+    "Z": Z_SHAPE_TEMPLATE,
+    "J": J_SHAPE_TEMPLATE,
+    "L": L_SHAPE_TEMPLATE,
+    "I": I_SHAPE_TEMPLATE,
+    "O": O_SHAPE_TEMPLATE,
+    "T": T_SHAPE_TEMPLATE,
+}
 
 FPSCLOCK = None
 DISPLAYSURF = None
@@ -171,9 +109,9 @@ class GameState:
             pygame.init()
             FPSCLOCK = pygame.time.Clock()
             DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
-            BASICFONT = pygame.font.Font('freesansbold.ttf', 18)
-            BIGFONT = pygame.font.Font('freesansbold.ttf', 100)
-            pygame.display.set_caption('Tetromino')
+            BASICFONT = pygame.font.Font("freesansbold.ttf", 18)
+            BIGFONT = pygame.font.Font("freesansbold.ttf", 100)
+            pygame.display.set_caption("Tetromino")
 
         # DEBUG
         self.total_lines = 0
@@ -211,7 +149,6 @@ class GameState:
         if self.gui:
             pygame.display.update()
 
-
         self.fallingPiece = self.getNewPiece()
         self.nextPiece = self.getNewPiece()
 
@@ -226,31 +163,35 @@ class GameState:
 
         # Move left
         if (input[1] == 1) and self.isValidPosition(adjX=-1):
-            self.fallingPiece['x'] -= 1
+            self.fallingPiece["x"] -= 1
             did_move = True
 
         # Move right
         elif (input[3] == 1) and self.isValidPosition(adjX=1):
-            self.fallingPiece['x'] += 1
+            self.fallingPiece["x"] += 1
             did_move = True
 
         # Rotating right
         elif input[2] == 1:
-            self.fallingPiece['rotation'] = (
-                self.fallingPiece['rotation'] + 1) % len(PIECES[self.fallingPiece['shape']])
+            self.fallingPiece["rotation"] = (self.fallingPiece["rotation"] + 1) % len(
+                PIECES[self.fallingPiece["shape"]]
+            )
             if not self.isValidPosition():
-                self.fallingPiece['rotation'] = (
-                    self.fallingPiece['rotation'] - 1) % len(PIECES[self.fallingPiece['shape']])
+                self.fallingPiece["rotation"] = (
+                    self.fallingPiece["rotation"] - 1
+                ) % len(PIECES[self.fallingPiece["shape"]])
             else:
                 did_move = True
 
         # Rotating left
         elif input[5] == 1:  # rotate the other direction
-            self.fallingPiece['rotation'] = (
-                self.fallingPiece['rotation'] - 1) % len(PIECES[self.fallingPiece['shape']])
+            self.fallingPiece["rotation"] = (self.fallingPiece["rotation"] - 1) % len(
+                PIECES[self.fallingPiece["shape"]]
+            )
             if not self.isValidPosition():
-                self.fallingPiece['rotation'] = (
-                    self.fallingPiece['rotation'] + 1) % len(PIECES[self.fallingPiece['shape']])
+                self.fallingPiece["rotation"] = (
+                    self.fallingPiece["rotation"] + 1
+                ) % len(PIECES[self.fallingPiece["shape"]])
             else:
                 did_move = True
 
@@ -261,7 +202,7 @@ class GameState:
                 if not self.isValidPosition(adjY=i):
                     k = i
                     break
-            self.fallingPiece['y'] += k - 1
+            self.fallingPiece["y"] += k - 1
             did_move = True
             put = True
 
@@ -269,7 +210,7 @@ class GameState:
             if not self.isValidPosition(adjY=1):
                 put = True
             else:
-                self.fallingPiece['y'] += 1
+                self.fallingPiece["y"] += 1
 
         # let the piece fall if it is time to fall
         # see if the piece has landed
@@ -309,7 +250,8 @@ class GameState:
                 self.drawPiece(falling_piece)
             pygame.display.update()
             image_data = pygame.surfarray.array3d(
-                pygame.transform.rotate(pygame.display.get_surface(), 90))
+                pygame.transform.rotate(pygame.display.get_surface(), 90)
+            )
             return image_data
         return None
 
@@ -320,15 +262,15 @@ class GameState:
         if self.gui:
             DISPLAYSURF.fill(BGCOLOR)
             piece = None
-            if 'piece_shape' in info:
+            if "piece_shape" in info:
                 piece = {
-                    'shape': info['piece_shape'],
-                    'x': info['piece_x'],
-                    'y': info['piece_y'],
-                    'rotation': info['piece_rotation'],
-                    'color': info['piece_color'],
+                    "shape": info["piece_shape"],
+                    "x": info["piece_x"],
+                    "y": info["piece_y"],
+                    "rotation": info["piece_rotation"],
+                    "color": info["piece_color"],
                 }
-            return self._render(info['color_board'], piece)
+            return self._render(info["color_board"], piece)
         return None
 
     def getActionSet(self):
@@ -339,7 +281,7 @@ class GameState:
         for i in range(0, BOARDHEIGHT):
             blank_row = True
             for j in range(0, BOARDWIDTH):
-                if self.board[j][i] != '.':
+                if self.board[j][i] != ".":
                     blank_row = False
             if not blank_row:
                 stack_height = BOARDHEIGHT - i
@@ -349,20 +291,28 @@ class GameState:
     def getNewPiece(self):
         # return a random new piece in a random rotation and color
         shape = random.choice(list(PIECES.keys()))
-        newPiece = {'shape': shape,
-                    'rotation': random.randint(0, len(PIECES[shape]) - 1),
-                    'x': int(BOARDWIDTH / 2) - int(TEMPLATEWIDTH / 2),
-                    'y': 0,  # start it above the self.board (i.e. less than 0)
-                    'color': random.randint(0, len(COLORS)-1)}
+        newPiece = {
+            "shape": shape,
+            "rotation": random.randint(0, len(PIECES[shape]) - 1),
+            "x": int(BOARDWIDTH / 2) - int(TEMPLATEWIDTH / 2),
+            "y": 0,  # start it above the self.board (i.e. less than 0)
+            "color": random.randint(0, len(COLORS) - 1),
+        }
         return newPiece
 
     def addToBoard(self):
         # fill in the self.board based on piece's location, shape, and rotation
         for x in range(TEMPLATEWIDTH):
             for y in range(TEMPLATEHEIGHT):
-                if PIECES[self.fallingPiece['shape']][self.fallingPiece['rotation']][y][x] != BLANK:
-                    self.board[x + self.fallingPiece['x']][y +
-                                                           self.fallingPiece['y']] = self.fallingPiece['color']
+                if (
+                    PIECES[self.fallingPiece["shape"]][self.fallingPiece["rotation"]][
+                        y
+                    ][x]
+                    != BLANK
+                ):
+                    self.board[x + self.fallingPiece["x"]][
+                        y + self.fallingPiece["y"]
+                    ] = self.fallingPiece["color"]
 
     def getBlankBoard(self):
         # create and return a new blank self.board data structure
@@ -378,12 +328,25 @@ class GameState:
         # Return True if the piece is within the self.board and not colliding
         for x in range(TEMPLATEWIDTH):
             for y in range(TEMPLATEHEIGHT):
-                isAboveBoard = y + self.fallingPiece['y'] + adjY < 0
-                if isAboveBoard or PIECES[self.fallingPiece['shape']][self.fallingPiece['rotation']][y][x] == BLANK:
+                isAboveBoard = y + self.fallingPiece["y"] + adjY < 0
+                if (
+                    isAboveBoard
+                    or PIECES[self.fallingPiece["shape"]][
+                        self.fallingPiece["rotation"]
+                    ][y][x]
+                    == BLANK
+                ):
                     continue
-                if not self.isOnBoard(x + self.fallingPiece['x'] + adjX, y + self.fallingPiece['y'] + adjY):
+                if not self.isOnBoard(
+                    x + self.fallingPiece["x"] + adjX, y + self.fallingPiece["y"] + adjY
+                ):
                     return False
-                if self.board[x + self.fallingPiece['x'] + adjX][y + self.fallingPiece['y'] + adjY] != BLANK:
+                if (
+                    self.board[x + self.fallingPiece["x"] + adjX][
+                        y + self.fallingPiece["y"] + adjY
+                    ]
+                    != BLANK
+                ):
                     return False
         return True
 
@@ -403,7 +366,7 @@ class GameState:
                 # Remove the line and pull boxes down by one line.
                 for pullDownY in range(y, 0, -1):
                     for x in range(BOARDWIDTH):
-                        self.board[x][pullDownY] = self.board[x][pullDownY-1]
+                        self.board[x][pullDownY] = self.board[x][pullDownY - 1]
                 # Set very top line to blank.
                 for x in range(BOARDWIDTH):
                     self.board[x][0] = BLANK
@@ -432,20 +395,38 @@ class GameState:
         if pixelx == None and pixely == None:
             pixelx, pixely = self.convertToPixelCoords(boxx, boxy)
         pygame.draw.rect(
-            DISPLAYSURF, COLORS[color], (pixelx + 1, pixely + 1, BOXSIZE - 1, BOXSIZE - 1))
+            DISPLAYSURF,
+            COLORS[color],
+            (pixelx + 1, pixely + 1, BOXSIZE - 1, BOXSIZE - 1),
+        )
         pygame.draw.rect(
-            DISPLAYSURF, LIGHTCOLORS[color], (pixelx + 1, pixely + 1, BOXSIZE - 4, BOXSIZE - 4))
+            DISPLAYSURF,
+            LIGHTCOLORS[color],
+            (pixelx + 1, pixely + 1, BOXSIZE - 4, BOXSIZE - 4),
+        )
 
     def drawBoard(self, board):
         if not self.gui:
             return
         # draw the border around the self.board
-        pygame.draw.rect(DISPLAYSURF, BORDERCOLOR, (XMARGIN - 3, TOPMARGIN - 7,
-                                                    (BOARDWIDTH * BOXSIZE) + 8, (BOARDHEIGHT * BOXSIZE) + 8), 5)
+        pygame.draw.rect(
+            DISPLAYSURF,
+            BORDERCOLOR,
+            (
+                XMARGIN - 3,
+                TOPMARGIN - 7,
+                (BOARDWIDTH * BOXSIZE) + 8,
+                (BOARDHEIGHT * BOXSIZE) + 8,
+            ),
+            5,
+        )
 
         # fill the background of the self.board
-        pygame.draw.rect(DISPLAYSURF, BGCOLOR, (XMARGIN, TOPMARGIN,
-                                                BOXSIZE * BOARDWIDTH, BOXSIZE * BOARDHEIGHT))
+        pygame.draw.rect(
+            DISPLAYSURF,
+            BGCOLOR,
+            (XMARGIN, TOPMARGIN, BOXSIZE * BOARDWIDTH, BOXSIZE * BOARDHEIGHT),
+        )
         # draw the individual boxes on the self.board
         for x in range(BOARDWIDTH):
             for y in range(BOARDHEIGHT):
@@ -463,17 +444,17 @@ class GameState:
                 n = 1 if v != BLANK else 0
                 row.append(n)
             rows.append(row)
-        info['board'] = np.array(rows, dtype='int8')
+        info["board"] = np.array(rows, dtype="int8")
 
-        info['color_board'] = copy.deepcopy(self.board)
+        info["color_board"] = copy.deepcopy(self.board)
 
         piece = self.fallingPiece
         if piece is not None:
-            info['piece_x'] = piece['x']
-            info['piece_y'] = piece['y']
-            info['piece_shape'] = piece['shape']
-            info['piece_rotation'] = piece['rotation']
-            info['piece_color'] = piece['color']
+            info["piece_x"] = piece["x"]
+            info["piece_y"] = piece["y"]
+            info["piece_shape"] = piece["shape"]
+            info["piece_rotation"] = piece["rotation"]
+            info["piece_color"] = piece["color"]
 
         return info
 
@@ -492,39 +473,44 @@ class GameState:
             rows.append(row)
 
         if piece is not None:
-            shapeToDraw = PIECES[piece['shape']][piece['rotation']]
-            piecex, piecey = piece['x'], piece['y']
+            shapeToDraw = PIECES[piece["shape"]][piece["rotation"]]
+            piecex, piecey = piece["x"], piece["y"]
 
             # draw each of the boxes that make up the piece
             for x in range(TEMPLATEWIDTH):
                 for y in range(TEMPLATEHEIGHT):
                     if shapeToDraw[y][x] != BLANK:
-                        rows[y+piecey][x+piecex][1] = 1
+                        rows[y + piecey][x + piecex][1] = 1
 
-        return np.array(rows, dtype='int8')
+        return np.array(rows, dtype="int8")
 
     def drawPiece(self, piece, pixelx=None, pixely=None):
         if not self.gui:
             return
-        shapeToDraw = PIECES[piece['shape']][piece['rotation']]
+        shapeToDraw = PIECES[piece["shape"]][piece["rotation"]]
         if pixelx == None and pixely == None:
             # if pixelx & pixely hasn't been specified, use the location stored in the piece data structure
-            pixelx, pixely = self.convertToPixelCoords(piece['x'], piece['y'])
+            pixelx, pixely = self.convertToPixelCoords(piece["x"], piece["y"])
 
         # draw each of the boxes that make up the piece
         for x in range(TEMPLATEWIDTH):
             for y in range(TEMPLATEHEIGHT):
                 if shapeToDraw[y][x] != BLANK:
                     self.drawBox(
-                        None, None, piece['color'], pixelx + (x * BOXSIZE), pixely + (y * BOXSIZE))
+                        None,
+                        None,
+                        piece["color"],
+                        pixelx + (x * BOXSIZE),
+                        pixely + (y * BOXSIZE),
+                    )
 
     def drawNextPiece(self):
         if not self.gui:
             return
         # draw the "next" text
-        nextSurf = BASICFONT.render('Next:', True, TEXTCOLOR)
+        nextSurf = BASICFONT.render("Next:", True, TEXTCOLOR)
         nextRect = nextSurf.get_rect()
         nextRect.topleft = (WINDOWWIDTH - 120, 80)
         DISPLAYSURF.blit(nextSurf, nextRect)
         # draw the "next" piece
-        self.drawPiece(self.nextPiece, pixelx=WINDOWWIDTH-120, pixely=100)
+        self.drawPiece(self.nextPiece, pixelx=WINDOWWIDTH - 120, pixely=100)
