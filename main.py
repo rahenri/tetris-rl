@@ -5,10 +5,13 @@ import json
 import time
 import gzip
 import sys
+import os
 
 
 import tetris_gui
 import train
+from tetris_env import TetrisEnv
+from tetris_gui import TetrisGUI
 
 
 def view(argv):
@@ -22,8 +25,8 @@ def view(argv):
     with gzip.open(args.filename, "rt") as f:
         states = json.load(f)
 
-    print(f'Loaded {len(states)} states')
-    print(f'Playback time: {len(states)/fps/60:.2f} minutes')
+    print(f"Loaded {len(states)} states")
+    print(f"Playback time: {len(states)/fps/60:.2f} minutes")
 
     start = time.time()
     gui = tetris_gui.TetrisGUI()
@@ -35,8 +38,29 @@ def view(argv):
             time.sleep(remaining)
 
 
+def rollout(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--load-model", required=True, help="Model weights")
+    args = parser.parse_args(argv)
+
+    env = TetrisEnv()
+
+    state_shape = env.observation_space.shape
+    action_size = env.action_space.n
+
+    agent = train.NNAgent(state_shape, action_size)
+
+    agent.load_model(args.load_model)
+
+    gui = TetrisGUI()
+
+    while True:
+        rew, _, pieces = train.run_episode(env, agent, True, gui)
+        print(f"reward: {rew} pieces: {pieces}")
+
+
 def main():
-    commands = {"train": train.train, "view": view}
+    commands = {"train": train.train, "view": view, "rollout": rollout}
     name = sys.argv[1]
 
     command = commands.get(name, None)

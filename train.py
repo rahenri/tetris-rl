@@ -192,9 +192,6 @@ class NNAgent:
 
     def load_model(self, filename):
         tensors = np.load(filename)
-        for k in tensors.keys():
-            print(k)
-
         for v in self.trainable_variables():
             name = v.name
             v.assign(tensors[name])
@@ -247,8 +244,6 @@ def run_episode(env, agent, demo, gui):
 
         if done:
             break
-
-    agent.remember(history)
 
     return total_reward, history, env.pieces
 
@@ -337,6 +332,7 @@ def train(argv):
                 total_reward, history, dropped_pieces = run_episode(
                     env, agent, demo, gui
                 )
+                agent.remember(history)
 
                 is_best = False
                 if dropped_pieces > best_episode:
