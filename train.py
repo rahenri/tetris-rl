@@ -50,12 +50,24 @@ class NNAgent:
         self.action_size = action_size
         self.gamma = 0.999
         self.episilon = 0.01
+        self.lamb = 0.98
         self.cache = {}
 
         board_shape = state_shape[:2]
         self.board_shape = board_shape
 
-        self.value_model = AgentModel(board_shape)
+        self.value_model = AgentModel("value", board_shape)
+        self.target_value_model = AgentModel("target_value", board_shape)
+
+        self.value_model.build(input_shape=(None,) + board_shape)
+        self.target_value_model.build(input_shape=(None,) + board_shape)
+
+        for a, b in zip(
+            self.value_model.trainable_variables,
+            self.target_value_model.trainable_variables,
+        ):
+            a.assign(b)
+
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         self.loss_function = tf.keras.losses.MeanSquaredError()
 
@@ -159,7 +171,7 @@ class NNAgent:
             dtype=np.float32,
         )
 
-        predictions = self.value_model(features_next).numpy().reshape(-1)
+        predictions = self.target_value_model(features_next).numpy().reshape(-1)
         target = np.zeros(predictions.shape)
         for i, pred in enumerate(predictions):
             nextq = pred if batch[i].next_info is not None else 0
@@ -168,11 +180,24 @@ class NNAgent:
 
         return features, target
 
+    def trainable_variables(self):
+        return (
+            self.value_model.trainable_variables
+            + self.target_value_model.trainable_variables
+        )
+
     def save_model(self, filename):
-        self.value_model.save_weights(filename, save_format="tf")
+        tensors = {v.name: v.numpy() for v in self.trainable_variables()}
+        np.savez(filename, **tensors)
 
     def load_model(self, filename):
-        self.value_model.load_weights(filename)
+        tensors = np.load(filename)
+        for k in tensors.keys():
+            print(k)
+
+        for v in self.trainable_variables():
+            name = v.name
+            v.assign(tensors[name])
 
     @log_duration
     def learn(self, batch_size):
@@ -187,6 +212,11 @@ class NNAgent:
         self.optimizer.apply_gradients(
             zip(gradients, self.value_model.trainable_variables)
         )
+        for a, b in zip(
+            self.value_model.trainable_variables,
+            self.target_value_model.trainable_variables,
+        ):
+            b.assign(b * self.lamb + a * (1.0 - self.lamb))
         return loss.numpy()
 
 
@@ -277,7 +307,7 @@ def train(argv):
 
     if args.load_model:
         filename = os.path.join(
-            args.experiment_dir, args.load_model, "model_snapshots", "model.tf"
+            args.experiment_dir, args.load_model, "model_snapshots", "model.npz"
         )
         print(f"Loaging model from {filename}")
         agent.load_model(filename)
@@ -290,6 +320,9 @@ def train(argv):
     best_window = 0
     best_episode = 0
     summary_every_sec = 1
+
+    model_dir = os.path.join(output_dir, "model_snapshots")
+    os.makedirs(model_dir, exist_ok=True)
 
     gui = None
     if args.gui:
@@ -318,15 +351,14 @@ def train(argv):
                     last_demo = time.time()
 
                 if is_best:
-                    agent.save_model(
-                        os.path.join(output_dir, "model_snapshots", f"model.tf")
+                    agent.save_model(os.path.join(model_dir, "model.npz"))
+
+                # save episode
+                d = os.path.join(output_dir, "ep_{:05d}.json.gz".format(i_episode))
+                with gzip.open(d, "wt") as f:
+                    json.dump(
+                        [h.info["color_board_with_falling_piece"] for h in history], f
                     )
-                    d = os.path.join(output_dir, "ep_{:05d}.json.gz".format(i_episode))
-                    with gzip.open(d, "wt") as f:
-                        json.dump(
-                            [h.info["color_board_with_falling_piece"] for h in history],
-                            f,
-                        )
 
                 loss = agent.learn(1 << 14)
 

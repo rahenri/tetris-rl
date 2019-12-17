@@ -22,6 +22,9 @@ def view(argv):
     with gzip.open(args.filename, "rt") as f:
         states = json.load(f)
 
+    print(f'Loaded {len(states)} states')
+    print(f'Playback time: {len(states)/fps/60:.2f} minutes')
+
     start = time.time()
     gui = tetris_gui.TetrisGUI()
     for i, state in enumerate(states):
