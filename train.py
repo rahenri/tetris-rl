@@ -18,12 +18,12 @@ from tetris_gui import TetrisGUI
 # state and the reward received in the transition
 class MemoryEntry:
     def __init__(self, info, next_info, reward):
-        self.info = info
-        self.next_info = next_info
+        self.board = info["board"]
+        self.next_board = next_info["board"] if next_info is not None else None
         self.reward = reward
 
     def __repr__(self):
-        return str((self.info["board"], self.reward))
+        return str((self.board, self.reward))
 
 
 # A start and reward pair
@@ -34,6 +34,28 @@ class PastState:
 
     def __repr__(self):
         return str((self.info["board"], self.reward))
+
+
+class Memory:
+    def __init__(self, max_size):
+        self.memory = []
+        self.max_size = max_size
+        self.next_entry_idx = 0
+
+    def add(self, entry: MemoryEntry):
+        if len(self.memory) < self.max_size:
+            self.memory.append(entry)
+        else:
+            self.memory[self.next_entry_idx] = entry
+            self.next_entry_idx += 1
+            if self.next_entry_idx >= self.max_size:
+                self.next_entry_idx = 0
+
+    def sample(self, size):
+        return random.sample(self.memory, min(len(self.memory), size))
+
+    def size(self):
+        return len(self.memory)
 
 
 # An agent that can lean and play tetris. It learns via reinforcement learning
@@ -52,6 +74,7 @@ class NNAgent:
         self.episilon = 0.01
         self.lamb = 0.98
         self.cache = {}
+        self.max_memory = 1000000
 
         board_shape = state_shape[:2]
         self.board_shape = board_shape
@@ -71,7 +94,7 @@ class NNAgent:
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         self.loss_function = tf.keras.losses.MeanSquaredError()
 
-        self.history = []
+        self.memory = Memory(1000000)
 
     # Add a full game to its memory, a game is a sequence of state-reward pairs.
     def remember(self, history: [PastState]):
@@ -87,7 +110,7 @@ class NNAgent:
             next_i = i + 1
             next_info = history[next_i].info if next_i < len(history) else None
 
-            self.history.append(MemoryEntry(record.info, next_info, record.reward))
+            self.memory.add(MemoryEntry(record.info, next_info, record.reward))
 
     # Pick a move given the game state, the move is selected by listing out all
     # possible places to place the current piece and evaluating the resulting
@@ -158,14 +181,14 @@ class NNAgent:
         return self.value_model(boards).numpy().reshape(-1)
 
     def _make_features(self, batch_size):
-        batch = random.sample(self.history, min(len(self.history), batch_size))
+        batch = self.memory.sample(batch_size)
         features = tf.convert_to_tensor(
-            [entry.info["board"] for entry in batch], dtype=np.float32
+            [entry.board for entry in batch], dtype=np.float32
         )
         zeros = np.zeros(self.board_shape)
         features_next = tf.convert_to_tensor(
             [
-                entry.next_info["board"] if entry.next_info is not None else zeros
+                entry.next_board if entry.next_board is not None else zeros
                 for entry in batch
             ],
             dtype=np.float32,
@@ -174,7 +197,7 @@ class NNAgent:
         predictions = self.target_value_model(features_next).numpy().reshape(-1)
         target = np.zeros(predictions.shape)
         for i, pred in enumerate(predictions):
-            nextq = pred if batch[i].next_info is not None else 0
+            nextq = pred if batch[i].next_board is not None else 0
             target[i] = batch[i].reward + self.gamma * nextq
         target = tf.convert_to_tensor(target.reshape([-1, 1]), dtype=np.float32)
 
@@ -198,7 +221,7 @@ class NNAgent:
 
     @log_duration
     def learn(self, batch_size):
-        if not self.history:
+        if not self.memory.size():
             return
         features, target = self._make_features(batch_size)
 
