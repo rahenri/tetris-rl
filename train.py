@@ -38,24 +38,50 @@ class PastState:
 
 class Memory:
     def __init__(self, max_size):
-        self.memory = []
         self.max_size = max_size
         self.next_entry_idx = 0
+        self.used_indices = 0
 
-    def add(self, entry: MemoryEntry):
-        if len(self.memory) < self.max_size:
-            self.memory.append(entry)
-        else:
-            self.memory[self.next_entry_idx] = entry
-            self.next_entry_idx += 1
-            if self.next_entry_idx >= self.max_size:
-                self.next_entry_idx = 0
+        self.boards = np.ones([max_size, 24, 10], dtype=np.int8)
+        self.next_boards = np.ones([max_size, 24, 10], dtype=np.int8)
+        self.rewards = np.ones([max_size], dtype=np.int16)
+        self.dones = np.ones([max_size], dtype=np.int8)
+
+        self.zero_board = np.ones([24, 10], dtype=np.int8)
+
+    def _next_idx(self):
+        idx = self.next_entry_idx
+        self.next_entry_idx += 1
+        self.used_indices = max(self.used_indices, self.next_entry_idx)
+        if self.next_entry_idx >= self.max_size:
+            self.next_entry_idx = 0
+        return idx
+
+    def add(self, info, next_info, reward):
+        idx = self._next_idx()
+
+        board = info["board"]
+        next_board = next_info["board"] if next_info else self.zero_board
+        done = 0 if next_info else 1
+
+        self.boards[idx] = board
+        self.next_boards[idx] = next_board
+        self.rewards[idx] = reward
+        self.dones[idx] = done
 
     def sample(self, size):
-        return random.sample(self.memory, min(len(self.memory), size))
+        size = min(size, self.used_indices)
+        indices = np.random.choice(self.used_indices, size, replace=False)
+
+        return (
+            self.boards[indices],
+            self.next_boards[indices],
+            self.rewards[indices],
+            self.dones[indices],
+        )
 
     def size(self):
-        return len(self.memory)
+        return self.used_indices
 
 
 # An agent that can lean and play tetris. It learns via reinforcement learning
@@ -94,7 +120,7 @@ class NNAgent:
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         self.loss_function = tf.keras.losses.MeanSquaredError()
 
-        self.memory = Memory(1000000)
+        self.memory = Memory(10000000)
 
     # Add a full game to its memory, a game is a sequence of state-reward pairs.
     def remember(self, history: [PastState]):
@@ -110,7 +136,7 @@ class NNAgent:
             next_i = i + 1
             next_info = history[next_i].info if next_i < len(history) else None
 
-            self.memory.add(MemoryEntry(record.info, next_info, record.reward))
+            self.memory.add(record.info, next_info, record.reward)
 
     # Pick a move given the game state, the move is selected by listing out all
     # possible places to place the current piece and evaluating the resulting
@@ -181,27 +207,17 @@ class NNAgent:
         return self.value_model(boards).numpy().reshape(-1)
 
     def _make_features(self, batch_size):
-        batch = self.memory.sample(batch_size)
-        features = tf.convert_to_tensor(
-            [entry.board for entry in batch], dtype=np.float32
-        )
-        zeros = np.zeros(self.board_shape)
-        features_next = tf.convert_to_tensor(
-            [
-                entry.next_board if entry.next_board is not None else zeros
-                for entry in batch
-            ],
-            dtype=np.float32,
-        )
+        boards, next_boards, rewards, dones = self.memory.sample(batch_size)
 
-        predictions = self.target_value_model(features_next).numpy().reshape(-1)
-        target = np.zeros(predictions.shape)
-        for i, pred in enumerate(predictions):
-            nextq = pred if batch[i].next_board is not None else 0
-            target[i] = batch[i].reward + self.gamma * nextq
-        target = tf.convert_to_tensor(target.reshape([-1, 1]), dtype=np.float32)
+        boards = tf.convert_to_tensor(boards, dtype=np.float32)
+        boards_next = tf.convert_to_tensor(next_boards, dtype=np.float32)
+        not_dones = tf.convert_to_tensor(1 - dones, dtype=np.float32)
+        rewards = tf.convert_to_tensor(rewards, dtype=np.float32)
 
-        return features, target
+        predictions = tf.reshape(self.target_value_model(boards_next), [-1])
+        targets = predictions * self.gamma * not_dones + rewards
+
+        return boards, targets
 
     def trainable_variables(self):
         return (
@@ -222,7 +238,7 @@ class NNAgent:
     @log_duration
     def learn(self, batch_size):
         if not self.memory.size():
-            return
+            return 0
         features, target = self._make_features(batch_size)
 
         with tf.GradientTape() as tape:
