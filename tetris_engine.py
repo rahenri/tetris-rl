@@ -66,6 +66,15 @@ PIECES = {
 }
 
 
+class Moves:
+    MOVE_LEFT = "move-left"
+    MOVE_RIGHT = "move-right"
+    ROTATE_LEFT = "rotate-left"
+    ROTATE_RIGHT = "rotate-right"
+    DROP = "drop"
+    DOWN = "down"
+
+
 class GameState:
     def __init__(self):
         # DEBUG
@@ -81,8 +90,6 @@ class GameState:
         self.falling_piece = self.get_new_piece()
         self.next_piece = self.get_new_piece()
 
-        self.frame_step([1, 0, 0, 0, 0, 0])
-
     def reinit(self):
         self.board = self.get_blank_board()
         self.score = 0
@@ -93,29 +100,21 @@ class GameState:
         self.falling_piece = self.get_new_piece()
         self.next_piece = self.get_new_piece()
 
-        self.frame_step([1, 0, 0, 0, 0, 0])
-
-        self.falling_piece = self.get_new_piece()
-        self.next_piece = self.get_new_piece()
-
-        self.frame_step([1, 0, 0, 0, 0, 0])
-
-    def frame_step(self, action):
-        did_move = False
+    def step(self, action):
         put = False
 
         # Move left
-        if (action[1] == 1) and self.is_valid_position(adj_x=-1):
-            self.falling_piece["x"] -= 1
-            did_move = True
+        if action == Moves.MOVE_LEFT:
+            if self.is_valid_position(adj_x=-1):
+                self.falling_piece["x"] -= 1
 
         # Move right
-        elif (action[3] == 1) and self.is_valid_position(adj_x=1):
-            self.falling_piece["x"] += 1
-            did_move = True
+        elif action == Moves.MOVE_RIGHT:
+            if self.is_valid_position(adj_x=1):
+                self.falling_piece["x"] += 1
 
         # Rotating right
-        elif action[2] == 1:
+        elif action == Moves.ROTATE_RIGHT:
             self.falling_piece["rotation"] = (self.falling_piece["rotation"] + 1) % len(
                 PIECES[self.falling_piece["shape"]]
             )
@@ -123,11 +122,9 @@ class GameState:
                 self.falling_piece["rotation"] = (
                     self.falling_piece["rotation"] - 1
                 ) % len(PIECES[self.falling_piece["shape"]])
-            else:
-                did_move = True
 
         # Rotating left
-        elif action[5] == 1:  # rotate the other direction
+        elif action == Moves.ROTATE_LEFT:  # rotate the other direction
             self.falling_piece["rotation"] = (self.falling_piece["rotation"] - 1) % len(
                 PIECES[self.falling_piece["shape"]]
             )
@@ -135,25 +132,23 @@ class GameState:
                 self.falling_piece["rotation"] = (
                     self.falling_piece["rotation"] + 1
                 ) % len(PIECES[self.falling_piece["shape"]])
-            else:
-                did_move = True
 
         # Drop Piece the current piece all the way down
-        elif action[4] == 1:
+        elif action == Moves.DROP:
             k = 0
             for i in range(1, BOARD_HEIGHT):
                 if not self.is_valid_position(adj_y=i):
                     k = i
                     break
             self.falling_piece["y"] += k - 1
-            did_move = True
             put = True
 
-        if not did_move:
-            if not self.is_valid_position(adj_y=1):
-                put = True
-            else:
+        elif action == Moves.DOWN:
+            if self.is_valid_position(adj_y=1):
                 self.falling_piece["y"] += 1
+
+        else:
+            raise ValueError(f"Invalid action {action}")
 
         # let the piece fall if it is time to fall
         # see if the piece has landed

@@ -8,22 +8,15 @@ import json
 import numpy as np
 import tensorflow as tf
 
-from board import Board, ACTION_MAP
-from tetris_env import TetrisEnv
-from util import log_duration
+from board import Board
+from drop_wrapper import DropWrapper
+from gui_wrapper import GuiWrapper
+from memory import Memory
 from model import AgentModel
+from tetris_engine import Moves
+from tetris_env import TetrisEnv
 from tetris_gui import TetrisGUI
-
-# Represents an entry in the agent's memory, contains a state, the following
-# state and the reward received in the transition
-class MemoryEntry:
-    def __init__(self, info, next_info, reward):
-        self.board = info["board"]
-        self.next_board = next_info["board"] if next_info is not None else None
-        self.reward = reward
-
-    def __repr__(self):
-        return str((self.board, self.reward))
+from util import log_duration
 
 
 # A start and reward pair
@@ -34,54 +27,6 @@ class PastState:
 
     def __repr__(self):
         return str((self.info["board"], self.reward))
-
-
-class Memory:
-    def __init__(self, max_size):
-        self.max_size = max_size
-        self.next_entry_idx = 0
-        self.used_indices = 0
-
-        self.boards = np.ones([max_size, 24, 10], dtype=np.int8)
-        self.next_boards = np.ones([max_size, 24, 10], dtype=np.int8)
-        self.rewards = np.ones([max_size], dtype=np.int16)
-        self.dones = np.ones([max_size], dtype=np.int8)
-
-        self.zero_board = np.ones([24, 10], dtype=np.int8)
-
-    def _next_idx(self):
-        idx = self.next_entry_idx
-        self.next_entry_idx += 1
-        self.used_indices = max(self.used_indices, self.next_entry_idx)
-        if self.next_entry_idx >= self.max_size:
-            self.next_entry_idx = 0
-        return idx
-
-    def add(self, info, next_info, reward):
-        idx = self._next_idx()
-
-        board = info["board"]
-        next_board = next_info["board"] if next_info else self.zero_board
-        done = 0 if next_info else 1
-
-        self.boards[idx] = board
-        self.next_boards[idx] = next_board
-        self.rewards[idx] = reward
-        self.dones[idx] = done
-
-    def sample(self, size):
-        size = min(size, self.used_indices)
-        indices = np.random.choice(self.used_indices, size, replace=False)
-
-        return (
-            self.boards[indices],
-            self.next_boards[indices],
-            self.rewards[indices],
-            self.dones[indices],
-        )
-
-    def size(self):
-        return self.used_indices
 
 
 # An agent that can lean and play tetris. It learns via reinforcement learning
@@ -99,7 +44,6 @@ class NNAgent:
         self.gamma = 0.999
         self.episilon = 0.01
         self.lamb = 0.98
-        self.cache = {}
         self.max_memory = 1000000
 
         board_shape = state_shape[:2]
@@ -111,11 +55,11 @@ class NNAgent:
         self.value_model.build(input_shape=(None,) + board_shape)
         self.target_value_model.build(input_shape=(None,) + board_shape)
 
-        for a, b in zip(
+        for var, var_target in zip(
             self.value_model.trainable_variables,
             self.target_value_model.trainable_variables,
         ):
-            a.assign(b)
+            var.assign(var_target)
 
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         self.loss_function = tf.keras.losses.MeanSquaredError()
@@ -123,29 +67,14 @@ class NNAgent:
         self.memory = Memory(10000000)
 
     # Add a full game to its memory, a game is a sequence of state-reward pairs.
-    def remember(self, history: [PastState]):
-        # Why do I filter zero reward stuff?
-        filtered_history = []
-        for record in history:
-            if record.reward == 0:
-                continue
-            filtered_history.append(record)
-        history = filtered_history
-
-        for i, record in enumerate(history):
-            next_i = i + 1
-            next_info = history[next_i].info if next_i < len(history) else None
-
-            self.memory.add(record.info, next_info, record.reward)
+    def remember(self, info, next_info, reward):
+        self.memory.add(info, next_info, reward)
 
     # Pick a move given the game state, the move is selected by listing out all
     # possible places to place the current piece and evaluating the resulting
     # board with the neural net, it returns the movement that leads to the
     # state which maximize the predicted future total reward.
-    def move(self, info, randomize=False):
-        if "piece_shape" not in info:
-            return "DOWN", self._eval(info["board"])
-
+    def act(self, info, randomize=False):
         x = info["piece_x"]
         y = info["piece_y"]
         shape = info["piece_shape"]
@@ -154,17 +83,12 @@ class NNAgent:
         board = info["board"]
 
         start = Board(board, shape, x, y, rotation)
-        h = start.full_hash()
-        if h in self.cache:
-            action, reward = self.cache[h]
-            return action, reward
-        self.cache = {}
 
         visited, finals = start.list_paths()
 
         if not finals:
             print(info)
-            raise RuntimeError("No finals")
+            raise RuntimeError("No finals, this shouldn't happen")
 
         boards = []
         rewards = []
@@ -189,15 +113,15 @@ class NNAgent:
             best_end_score = scores[best]
 
         node = best_end
-        actions = ["DOWN"]
+        actions = []
         while node != start:
-            (action, n) = visited[node.tup()]
-            actions.append(action)
-            node = n
-            self.cache[n.full_hash()] = (action, best_end_score)
-        action = actions[-1]
+            (action, next_node) = visited[node.tup()]
+            if action != Moves.DROP:
+                actions.append(action)
+            node = next_node
+        actions.reverse()
 
-        return action, best_end_score
+        return actions, best_end_score
 
     def _eval(self, board):
         return self._eval_many(np.array([board]))[0]
@@ -257,7 +181,7 @@ class NNAgent:
 
 
 @log_duration
-def run_episode(env, agent, demo, gui):
+def run_episode(env, agent, demo):
     _, info = env.reset()
 
     total_reward = 0
@@ -265,26 +189,58 @@ def run_episode(env, agent, demo, gui):
     history = []
 
     for _ in range(10000000):
-        action, _action_score = agent.move(info, not demo)
+        action, _action_score = agent.act(info, not demo)
 
-        if demo and gui:
-            gui.render(info["color_board_with_falling_piece"])
-
-        _, reward, done, next_info = env.step(ACTION_MAP[action])
+        _, reward, done, next_info = env.step(action)
 
         total_reward += reward
 
         if done:
             next_info = None
 
-        history.append(PastState(info, reward))
+        yield (info, next_info, reward)
 
         info = next_info
 
         if done:
             break
 
-    return total_reward, history, env.pieces
+
+def make_env(gui):
+    env = TetrisEnv()
+
+    if gui is not None:
+        env = GuiWrapper(env, gui)
+
+    env = RecorderWrapper(env)
+    recorder = env
+
+    env = DropWrapper(env)
+
+    return env, recorder
+
+
+class RecorderWrapper:
+    def __init__(self, env):
+        self.env = env
+        self.action_space = env.action_space
+        self.observation_space = env.observation_space
+        self.record = []
+
+    def reset(self):
+        self.record = []
+        state, info = self.env.reset()
+        self.record.append(info["color_board_with_falling_piece"])
+        return state, info
+
+    def step(self, action):
+        state, reward, done, info = self.env.step(action)
+        self.record.append(info["color_board_with_falling_piece"])
+        return state, reward, done, info
+
+    @property
+    def pieces(self):
+        return self.env.pieces
 
 
 def train(argv):
@@ -325,7 +281,11 @@ def train(argv):
     print(f"Will run a total of {episodes} episodes")
     print(f"Writting files to {output_dir}")
 
-    env = TetrisEnv()
+    gui = None
+    if args.gui:
+        gui = TetrisGUI()
+
+    env, recorder = make_env(gui)
 
     # logging.basicConfig(
     #     format='%(asctime)s %(filename)s:%(lineno)d %(message)s',
@@ -358,20 +318,18 @@ def train(argv):
     model_dir = os.path.join(output_dir, "model_snapshots")
     os.makedirs(model_dir, exist_ok=True)
 
-    gui = None
-    if args.gui:
-        gui = TetrisGUI()
-
     with open(os.path.join(output_dir, "episodes.txt"), "w") as output_log:
         try:
             for i_episode in range(episodes):
                 now = time.time()
                 demo = now - last_demo > 30
 
-                total_reward, history, dropped_pieces = run_episode(
-                    env, agent, demo, gui
-                )
-                agent.remember(history)
+                total_reward = 0
+                for info, next_info, reward in run_episode(env, agent, demo):
+                    total_reward += reward
+                    agent.remember(info, next_info, reward)
+
+                dropped_pieces = env.pieces
 
                 is_best = False
                 if dropped_pieces > best_episode:
@@ -389,24 +347,24 @@ def train(argv):
                     agent.save_model(os.path.join(model_dir, "model.npz"))
 
                 # save episode
-                d = os.path.join(output_dir, "ep_{:05d}.json.gz".format(i_episode))
-                with gzip.open(d, "wt") as f:
-                    json.dump(
-                        [h.info["color_board_with_falling_piece"] for h in history], f
-                    )
+                filename = os.path.join(
+                    output_dir, "ep_{:05d}.json.gz".format(i_episode)
+                )
+                with gzip.open(filename, "wt") as out:
+                    json.dump(recorder.record, out)
 
                 loss = agent.learn(1 << 14)
 
                 now = time.time()
                 if now - last_summary > summary_every_sec:
-                    m = np.mean(window)
-                    best_window = max(best_window, m)
+                    mean = np.mean(window)
+                    best_window = max(best_window, mean)
                     print(
-                        "{}: Episode finished with reward {}"
-                        ", moving average: {:.2f}, best average: {:.2f}, best episode: {}, loss: {}".format(
+                        "{}: Episode finished with reward {}, moving average: {:.2f}, "
+                        "best average: {:.2f}, best episode: {}, loss: {}".format(
                             i_episode,
                             dropped_pieces,
-                            m,
+                            mean,
                             best_window,
                             best_episode,
                             loss,

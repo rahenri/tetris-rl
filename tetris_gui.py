@@ -100,6 +100,13 @@ class TetrisGUI:
         self._draw_board(board)
         pygame.display.update()
 
+    def process_events(self):
+        events = pygame.event.get()
+        for event in events:
+            if event.type == pygame.QUIT:
+                return False
+        return True
+
     def screenshot(self):
         image_data = pygame.surfarray.array3d(
             pygame.transform.rotate(self.display_surf, 90)

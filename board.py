@@ -3,144 +3,74 @@
 import numpy as np
 import utils
 from numba import jit, int32, int8
+from tetris_engine import Moves
 
 S_SHAPE_TEMPLATE = [
-    ['..OO.',
-     '.OO..',
-     '.....',
-     '.....',
-     '.....'],
-    ['..O..',
-     '..OO.',
-     '...O.',
-     '.....',
-     '.....']]
+    ["..OO.", ".OO..", ".....", ".....", "....."],
+    ["..O..", "..OO.", "...O.", ".....", "....."],
+]
 
 Z_SHAPE_TEMPLATE = [
-    ['.OO..',
-     '..OO.',
-     '.....',
-     '.....',
-     '.....'],
-    ['..O..',
-     '.OO..',
-     '.O...',
-     '.....',
-     '.....']]
+    [".OO..", "..OO.", ".....", ".....", "....."],
+    ["..O..", ".OO..", ".O...", ".....", "....."],
+]
 
 I_SHAPE_TEMPLATE = [
-    ['..O..',
-     '..O..',
-     '..O..',
-     '..O..',
-     '.....'],
-    ['OOOO.',
-     '.....',
-     '.....',
-     '.....',
-     '.....']]
+    ["..O..", "..O..", "..O..", "..O..", "....."],
+    ["OOOO.", ".....", ".....", ".....", "....."],
+]
 
-O_SHAPE_TEMPLATE = [
-    ['.OO..',
-     '.OO..',
-     '.....',
-     '.....',
-     '.....']]
+O_SHAPE_TEMPLATE = [[".OO..", ".OO..", ".....", ".....", "....."]]
 
 J_SHAPE_TEMPLATE = [
-    ['.O...',
-     '.OOO.',
-     '.....',
-     '.....',
-     '.....'],
-    ['..OO.',
-     '..O..',
-     '..O..',
-     '.....',
-     '.....'],
-    ['.OOO.',
-     '...O.',
-     '.....',
-     '.....',
-     '.....'],
-    ['..O..',
-     '..O..',
-     '.OO..',
-     '.....',
-     '.....']]
+    [".O...", ".OOO.", ".....", ".....", "....."],
+    ["..OO.", "..O..", "..O..", ".....", "....."],
+    [".OOO.", "...O.", ".....", ".....", "....."],
+    ["..O..", "..O..", ".OO..", ".....", "....."],
+]
 
 L_SHAPE_TEMPLATE = [
-    ['...O.',
-     '.OOO.',
-     '.....',
-     '.....',
-     '.....'],
-    ['..O..',
-     '..O..',
-     '..OO.',
-     '.....',
-     '.....'],
-    ['.OOO.',
-     '.O...',
-     '.....',
-     '.....',
-     '.....'],
-    ['.OO..',
-     '..O..',
-     '..O..',
-     '.....',
-     '.....']]
+    ["...O.", ".OOO.", ".....", ".....", "....."],
+    ["..O..", "..O..", "..OO.", ".....", "....."],
+    [".OOO.", ".O...", ".....", ".....", "....."],
+    [".OO..", "..O..", "..O..", ".....", "....."],
+]
 
 T_SHAPE_TEMPLATE = [
-    ['..O..',
-     '.OOO.',
-     '.....',
-     '.....',
-     '.....'],
-    ['..O..',
-     '..OO.',
-     '..O..',
-     '.....',
-     '.....'],
-    ['.OOO.',
-     '..O..',
-     '.....',
-     '.....',
-     '.....'],
-    ['..O..',
-     '.OO..',
-     '..O..',
-     '.....',
-     '.....']]
+    ["..O..", ".OOO.", ".....", ".....", "....."],
+    ["..O..", "..OO.", "..O..", ".....", "....."],
+    [".OOO.", "..O..", ".....", ".....", "....."],
+    ["..O..", ".OO..", "..O..", ".....", "....."],
+]
 
 PIECES = {
-    'S': S_SHAPE_TEMPLATE,
-    'Z': Z_SHAPE_TEMPLATE,
-    'J': J_SHAPE_TEMPLATE,
-    'L': L_SHAPE_TEMPLATE,
-    'I': I_SHAPE_TEMPLATE,
-    'O': O_SHAPE_TEMPLATE,
-    'T': T_SHAPE_TEMPLATE,
+    "S": S_SHAPE_TEMPLATE,
+    "Z": Z_SHAPE_TEMPLATE,
+    "J": J_SHAPE_TEMPLATE,
+    "L": L_SHAPE_TEMPLATE,
+    "I": I_SHAPE_TEMPLATE,
+    "O": O_SHAPE_TEMPLATE,
+    "T": T_SHAPE_TEMPLATE,
 }
 
 
 ACTIONS = [
-    'DROP',
-    'DOWN',
-    'LEFT',
-    'RIGHT',
-    'ROTATE_RIGHT',
-    'ROTATE_LEFT',
+    Moves.DOWN,
+    Moves.DROP,
+    Moves.MOVE_LEFT,
+    Moves.MOVE_RIGHT,
+    Moves.ROTATE_RIGHT,
+    Moves.ROTATE_LEFT,
 ]
 
 
 ACTION_MAP = {
-    'DOWN': 0,
-    'LEFT': 1,
-    'ROTATE_RIGHT': 2,
-    'RIGHT': 3,
-    'DROP': 4,
-    'ROTATE_LEFT': 5,
+    Moves.DOWN: 0,
+    Moves.MOVE_LEFT: 1,
+    Moves.ROTATE_RIGHT: 2,
+    Moves.MOVE_RIGHT: 3,
+    Moves.DROP: 4,
+    Moves.ROTATE_LEFT: 5,
 }
 
 
@@ -149,16 +79,16 @@ def to_array(shape):
     for row in shape:
         r = []
         for col in row:
-            r.append(1 if col == 'O' else 0)
+            r.append(1 if col == "O" else 0)
         rows.append(r)
-    return np.array(rows, dtype='int8')
+    return np.array(rows, dtype="int8")
 
 
 def rotations_to_array(rotations):
     out = []
     for r in rotations:
         out.append(to_array(r))
-    return np.array(out, dtype='int8')
+    return np.array(out, dtype="int8")
 
 
 ARRAY_PIECES = {k: rotations_to_array(s) for k, s in PIECES.items()}
@@ -177,8 +107,8 @@ def _is_valid_impl(board, shape, x, y):
         for j in range(5):
             if not shape[i][j]:
                 continue
-            y1 = y+i
-            x1 = x+j
+            y1 = y + i
+            x1 = x + j
             if x1 < 0 or y1 >= rows or x1 >= cols or board[y1][x1]:
                 return False
     return True
@@ -191,7 +121,7 @@ def _drop_piece(board, shape, x, y, rotation):
 
 @jit(int32(int8[:, :], int8[:, :], int32, int32), nopython=True)
 def _drop_piece_impl(board, shape, x, y):
-    while _is_valid_impl(board, shape, x, y+1):
+    while _is_valid_impl(board, shape, x, y + 1):
         y += 1
     return y
 
@@ -206,15 +136,15 @@ def _materialize(board, shape, x, y, rotation):
         for j in range(5):
             if not template[i][j]:
                 continue
-            y1 = y+i
-            x1 = x+j
+            y1 = y + i
+            x1 = x + j
             if x1 < 0 or y1 < 0 or y1 >= rows or x1 >= cols:
                 continue
             board[y1][x1] = 1
     unclear = np.zeros((rows, cols), dtype=np.int8)
-    j = len(board)-1
+    j = len(board) - 1
     cleared = 0
-    for i in range(len(board)-1, -1, -1):
+    for i in range(len(board) - 1, -1, -1):
         row = board[i]
         if row.sum() < len(row):
             unclear[j] = row
@@ -229,9 +159,6 @@ def _materialize(board, shape, x, y, rotation):
 def _action(board, shape, x, y, rotation, action):
     if action == 0:
         # Down
-        if not _is_valid(board, shape, x, y+1, rotation):
-            b, cleared = _materialize(board, shape, x, y, rotation)
-            return (b, x, y, rotation, True, cleared)
         y += 1
     elif action == 1:
         # Left
@@ -241,10 +168,10 @@ def _action(board, shape, x, y, rotation, action):
         x += 1
     elif action == 2:
         # Rotate right
-        rotation = (rotation+1) % len(shape)
+        rotation = (rotation + 1) % len(shape)
     elif action == 5:
         # Rotate left
-        rotation = (rotation-1) % len(shape)
+        rotation = (rotation - 1) % len(shape)
     elif action == 4:
         # Drop
         y = _drop_piece(board, shape, x, y, rotation)
@@ -269,7 +196,9 @@ class Board:
 
     def action(self, action):
         shape = ARRAY_PIECES[self.shape]
-        out = _action(self.board, shape, self.x, self.y, self.rotation, ACTION_MAP[action])
+        out = _action(
+            self.board, shape, self.x, self.y, self.rotation, ACTION_MAP[action]
+        )
         if out is None:
             return out
         board, x, y, rotation, done, cleared = out
@@ -312,5 +241,6 @@ class Board:
         return str((self.x, self.y, self.rotation, self.done))
 
     def full_hash(self):
-        return utils.hash_value((
-            self.board, self.shape, self.x, self.y, self.rotation, self.done))
+        return utils.hash_value(
+            (self.board, self.shape, self.x, self.y, self.rotation, self.done)
+        )

@@ -33,6 +33,8 @@ def view(argv):
     for i, state in enumerate(states):
         gui.render(state)
         target_timestamp = start + i / fps
+        if not gui.process_events():
+            break
         remaining = target_timestamp - time.time()
         if remaining > 0:
             time.sleep(remaining)

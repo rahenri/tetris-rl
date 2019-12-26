@@ -1,4 +1,3 @@
-import numpy as np
 import tetris_engine as game
 
 
@@ -27,11 +26,8 @@ class TetrisEnv:
         )
         self._seed = 0
 
-    def step(self, a):
-        self._action_set = np.zeros([len(self._action_set)])
-        self._action_set[a] = 1
-        state, reward, terminal, info = self.game_state.frame_step(self._action_set)
-        return state, reward, terminal, info
+    def step(self, action):
+        return self.game_state.step(action)
 
     @property
     def _n_actions(self):
