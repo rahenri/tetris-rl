@@ -186,7 +186,6 @@ def run_episode(env, agent, demo):
 
     for _ in range(10000000):
         action, _action_score = agent.act(info, not demo)
-        print(_action_score)
 
         _, reward, done, next_info = env.step(action)
 
@@ -220,14 +219,24 @@ class RecorderWrapper:
         self.env = env
         self.action_space = env.action_space
         self.observation_space = env.observation_space
-        self.record = []
+        self.output = None
+
+    def start_episode(self, filename):
+        if self.output:
+            self.output.close()
+        self.output = gzip.open(filename, "wt")
+
+    def end_episode(self):
+        if self.output:
+            self.output.close()
+            self.output = None
 
     def _store(self, info):
         board = info["color_board_with_falling_piece"]
-        self.record.append("".join(["".join([str(item) for item in r]) for r in board]))
+        board = "".join(["".join([str(item) for item in r]) for r in board])
+        self.output.write(board + "\n")
 
     def reset(self):
-        self.record = []
         state, info = self.env.reset()
         self._store(info)
         return state, info
@@ -323,11 +332,17 @@ def train(argv):
                 now = time.time()
                 demo = now - last_demo > 30
 
+                filename = os.path.join(
+                    output_dir, "ep_{:05d}.json.gz".format(i_episode)
+                )
+                recorder.start_episode(filename)
+
                 total_reward = 0
                 for info, next_info, reward in run_episode(env, agent, demo):
                     total_reward += reward
                     agent.remember(info, next_info, reward)
 
+                recorder.end_episode()
                 dropped_pieces = env.pieces
 
                 is_best = False
@@ -344,13 +359,6 @@ def train(argv):
 
                 if is_best:
                     agent.save_model(os.path.join(model_dir, "model.npz"))
-
-                # save episode
-                filename = os.path.join(
-                    output_dir, "ep_{:05d}.json.gz".format(i_episode)
-                )
-                with gzip.open(filename, "wt") as out:
-                    json.dump(recorder.record, out)
 
                 loss = agent.learn(1 << 14)
 
