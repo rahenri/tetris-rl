@@ -23,7 +23,9 @@ def view(argv):
     fps = args.fps
 
     with gzip.open(args.filename, "rt") as f:
-        states = json.load(f)
+        states = []
+        for line in f:
+            states.append(line.strip())
 
     print(f"Loaded {len(states)} states")
     print(f"Playback time: {len(states)/fps/60:.2f} minutes")
