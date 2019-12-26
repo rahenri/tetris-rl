@@ -31,7 +31,19 @@ def view(argv):
     start = time.time()
     gui = tetris_gui.TetrisGUI()
     for i, state in enumerate(states):
-        gui.render(state)
+
+        rows = []
+        while state:
+            r = state[:24]
+            state = state[24:]
+            row = []
+            for l in r:
+                if l != ".":
+                    l = int(l)
+                row.append(l)
+            rows.append(row)
+
+        gui.render(rows)
         target_timestamp = start + i / fps
         if not gui.process_events():
             break
@@ -45,7 +57,8 @@ def rollout(argv):
     parser.add_argument("--load-model", required=True, help="Model weights")
     args = parser.parse_args(argv)
 
-    env = TetrisEnv()
+    gui = TetrisGUI()
+    env, _ = train.make_env(gui)
 
     state_shape = env.observation_space.shape
     action_size = env.action_space.n
@@ -54,10 +67,8 @@ def rollout(argv):
 
     agent.load_model(args.load_model)
 
-    gui = TetrisGUI()
-
     while True:
-        rew, _, pieces = train.run_episode(env, agent, True, gui)
+        rew, _, pieces = train.run_episode(env, agent, True)
         print(f"reward: {rew} pieces: {pieces}")
 
 

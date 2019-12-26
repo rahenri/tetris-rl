@@ -184,16 +184,11 @@ class NNAgent:
 def run_episode(env, agent, demo):
     _, info = env.reset()
 
-    total_reward = 0
-
-    history = []
-
     for _ in range(10000000):
         action, _action_score = agent.act(info, not demo)
+        print(_action_score)
 
         _, reward, done, next_info = env.step(action)
-
-        total_reward += reward
 
         if done:
             next_info = None
@@ -227,15 +222,19 @@ class RecorderWrapper:
         self.observation_space = env.observation_space
         self.record = []
 
+    def _store(self, info):
+        board = info["color_board_with_falling_piece"]
+        self.record.append("".join(["".join([str(item) for item in r]) for r in board]))
+
     def reset(self):
         self.record = []
         state, info = self.env.reset()
-        self.record.append(info["color_board_with_falling_piece"])
+        self._store(info)
         return state, info
 
     def step(self, action):
         state, reward, done, info = self.env.step(action)
-        self.record.append(info["color_board_with_falling_piece"])
+        self._store(info)
         return state, reward, done, info
 
     @property

@@ -44,7 +44,7 @@ class AgentModel(Model):
         ]
 
         for i, size in enumerate([32, 64, 128]):
-            self._layers.append(Block(name=f"{name}/block_{i}", filters=size, layers=4))
+            self._layers.append(Block(name=f"{name}/block_{i}", filters=size, layers=2))
 
         self._layers.extend(
             [
