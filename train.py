@@ -4,9 +4,12 @@ import time
 import os
 import gzip
 import json
+import resource
 
 import numpy as np
 import tensorflow as tf
+from tabulate import tabulate
+from memory_profiler import profile
 
 from board import Board
 from drop_wrapper import DropWrapper
@@ -16,7 +19,8 @@ from model import AgentModel
 from tetris_engine import Moves
 from tetris_env import TetrisEnv
 from tetris_gui import TetrisGUI
-from util import log_duration
+
+# from util import log_duration, log_memory_change, log_memory_change_context
 
 
 # A start and reward pair
@@ -44,7 +48,6 @@ class NNAgent:
         self.gamma = 0.999
         self.episilon = 0.01
         self.lamb = 0.98
-        self.max_memory = 1000000
 
         board_shape = state_shape[:2]
         self.board_shape = board_shape
@@ -63,12 +66,6 @@ class NNAgent:
 
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         self.loss_function = tf.keras.losses.MeanSquaredError()
-
-        self.memory = Memory(10000000)
-
-    # Add a full game to its memory, a game is a sequence of state-reward pairs.
-    def remember(self, info, next_info, reward):
-        self.memory.add(info, next_info, reward)
 
     # Pick a move given the game state, the move is selected by listing out all
     # possible places to place the current piece and evaluating the resulting
@@ -130,8 +127,8 @@ class NNAgent:
         boards = tf.convert_to_tensor(boards, dtype=np.float32)
         return self.value_model(boards).numpy().reshape(-1)
 
-    def _make_features(self, batch_size):
-        boards, next_boards, rewards, dones = self.memory.sample(batch_size)
+    def _make_features(self, memory, batch_size):
+        boards, next_boards, rewards, dones = memory.sample(batch_size)
 
         boards = tf.convert_to_tensor(boards, dtype=np.float32)
         boards_next = tf.convert_to_tensor(next_boards, dtype=np.float32)
@@ -159,11 +156,8 @@ class NNAgent:
             name = v.name
             v.assign(tensors[name])
 
-    @log_duration
-    def learn(self, batch_size):
-        if not self.memory.size():
-            return 0
-        features, target = self._make_features(batch_size)
+    def train(self, memory, batch_size):
+        features, target = self._make_features(memory, batch_size)
 
         with tf.GradientTape() as tape:
             predicions = self.value_model(features, training=True)
@@ -177,37 +171,48 @@ class NNAgent:
             self.target_value_model.trainable_variables,
         ):
             b.assign(b * self.lamb + a * (1.0 - self.lamb))
+        del tape
         return loss.numpy()
 
 
-@log_duration
-def run_episode(env, agent, demo):
+def run_episode(env, agent, demo, memory, max_steps):
     _, info = env.reset()
 
-    for _ in range(10000000):
+    total_reward = 0
+    steps = 0
+
+    for _ in range(max_steps):
         action, _action_score = agent.act(info, not demo)
 
         _, reward, done, next_info = env.step(action)
+        total_reward += reward
+        steps += 1
 
         if done:
             next_info = None
 
-        yield (info, next_info, reward)
+        if memory is not None:
+            memory.add(info, next_info, reward)
 
         info = next_info
 
         if done:
             break
 
+    return total_reward, steps
 
-def make_env(gui):
+
+def make_env(gui, record=True):
     env = TetrisEnv()
 
     if gui is not None:
         env = GuiWrapper(env, gui)
 
-    env = RecorderWrapper(env)
-    recorder = env
+    if record:
+        env = RecorderWrapper(env)
+        recorder = env
+    else:
+        recorder = None
 
     env = DropWrapper(env)
 
@@ -276,12 +281,17 @@ def train(argv):
     )
     args = parser.parse_args(argv)
 
-    episodes = args.episodes
+    return train_real(
+        args.episodes, args.name, args.experiment_dir, args.load_model, args.gui
+    )
 
-    output_dir = os.path.join(args.experiment_dir, args.name)
+
+def train_real(episodes, name, experiment_dir, load_model, enable_gui):
+
+    output_dir = os.path.join(experiment_dir, name)
 
     if os.path.exists(output_dir):
-        print(f"An experiment named {args.name} already exists")
+        print(f"An experiment named {name} already exists")
         return
 
     os.makedirs(output_dir, exist_ok=True)
@@ -290,7 +300,7 @@ def train(argv):
     print(f"Writting files to {output_dir}")
 
     gui = None
-    if args.gui:
+    if enable_gui:
         gui = TetrisGUI()
 
     env, recorder = make_env(gui)
@@ -307,21 +317,22 @@ def train(argv):
 
     agent = NNAgent(state_shape, action_size)
 
-    if args.load_model:
+    memory = Memory(10000000)
+
+    if load_model:
         filename = os.path.join(
-            args.experiment_dir, args.load_model, "model_snapshots", "model.npz"
+            experiment_dir, load_model, "model_snapshots", "model.npz"
         )
-        print(f"Loaging model from {filename}")
+        print(f"Loading model from {filename}")
         agent.load_model(filename)
 
-    window = []
-
-    last_summary = time.time()
     last_demo = time.time()
 
-    best_window = 0
-    best_episode = 0
-    summary_every_sec = 1
+    best_episode_steps = 0
+    best_episode_reward = 0
+
+    batch_size = 1 << 12
+    max_steps = 1000
 
     model_dir = os.path.join(output_dir, "model_snapshots")
     os.makedirs(model_dir, exist_ok=True)
@@ -337,22 +348,20 @@ def train(argv):
                 )
                 recorder.start_episode(filename)
 
-                total_reward = 0
-                for info, next_info, reward in run_episode(env, agent, demo):
-                    total_reward += reward
-                    agent.remember(info, next_info, reward)
+                start = time.time()
+                total_reward, steps = run_episode(env, agent, demo, memory, max_steps)
+                episode_duration_per_step = (time.time() - start) / steps
 
                 recorder.end_episode()
                 dropped_pieces = env.pieces
 
                 is_best = False
-                if dropped_pieces > best_episode:
-                    best_episode = dropped_pieces
+                if dropped_pieces > best_episode_steps:
+                    best_episode_steps = dropped_pieces
+                if total_reward > best_episode_reward:
+                    best_episode_reward = total_reward
                     is_best = True
 
-                window.append(dropped_pieces)
-                if len(window) > 100:
-                    window.pop(0)
 
                 if demo:
                     last_demo = time.time()
@@ -360,32 +369,32 @@ def train(argv):
                 if is_best:
                     agent.save_model(os.path.join(model_dir, "model.npz"))
 
-                loss = agent.learn(1 << 14)
+                start_learn = time.time()
+                if memory.size() >= 1024:
+                    loss = agent.train(memory, batch_size)
+                else:
+                    loss = 0
+                learn_duration = time.time() - start_learn
+                rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
 
-                now = time.time()
-                if now - last_summary > summary_every_sec:
-                    mean = np.mean(window)
-                    best_window = max(best_window, mean)
-                    print(
-                        "{}: Episode finished with reward {}, moving average: {:.2f}, "
-                        "best average: {:.2f}, best episode: {}, loss: {}".format(
-                            i_episode,
-                            dropped_pieces,
-                            mean,
-                            best_window,
-                            best_episode,
-                            loss,
-                        )
-                    )
-                    last_summary = time.time()
-
-                output = {
+                metrics = {
                     "episode": i_episode,
                     "dropped_pieces": dropped_pieces,
                     "reward": total_reward,
                     "loss": float(loss),
+                    "best episode (steps)": best_episode_steps,
+                    "best episode (reward)": best_episode_reward,
+                    "memory size": memory.size(),
+                    "train step duration (ms)": learn_duration * 1000.0,
+                    "time per env step(ms)": episode_duration_per_step * 1000.0,
+                    "rss (MB)": rss,
                 }
-                output_log.write(json.dumps(output) + "\n")
+                print(
+                    tabulate(
+                        metrics.items(), tablefmt="psql", headers=["name", "value"]
+                    )
+                )
+                output_log.write(json.dumps(metrics) + "\n")
                 output_log.flush()
 
         except KeyboardInterrupt:

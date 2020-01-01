@@ -159,7 +159,19 @@ class GameState:
             self.add_to_board()
 
             cleared = self.remove_complete_lines()
-            reward = 1 + cleared * 10
+            if cleared == 0:
+                reward = 0
+            elif cleared == 1:
+                reward = 10
+            elif cleared == 2:
+                reward = 30
+            elif cleared == 3:
+                reward = 60
+            elif cleared == 4:
+                reward = 100
+            else:
+                raise RuntimeError()
+            reward += 1
 
             self.lines += cleared
             self.total_lines += cleared

@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Memory:
     def __init__(self, max_size):
         self.max_size = max_size
@@ -34,8 +35,7 @@ class Memory:
         self.dones[idx] = done
 
     def sample(self, size):
-        size = min(size, self.used_indices)
-        indices = np.random.choice(self.used_indices, size, replace=False)
+        indices = np.random.choice(self.used_indices, size, replace=True)
 
         return (
             self.boards[indices],

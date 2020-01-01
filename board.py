@@ -232,7 +232,21 @@ class Board:
         return self.done
 
     def reward(self):
-        return (1 + self.cleared * 10) if self.is_done() else 0
+        if not self.is_done():
+            return 0
+        if self.cleared == 0:
+            reward = 0
+        elif self.cleared == 1:
+            reward = 10
+        elif self.cleared == 2:
+            reward = 30
+        elif self.cleared == 3:
+            reward = 60
+        elif self.cleared == 4:
+            reward = 100
+        else:
+            raise RuntimeError()
+        return reward + 1
 
     def tup(self):
         return (self.x, self.y, self.rotation, self.done)

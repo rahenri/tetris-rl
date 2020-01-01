@@ -19,6 +19,7 @@ def main():
         help="Directory containing experiments",
     )
     args = parser.parse_args()
+    metric = "reward"
 
     for experiment in args.experiments:
         filename = os.path.join(args.experiment_dir, experiment, "episodes.txt")
@@ -28,8 +29,8 @@ def main():
             for line in f:
                 record = json.loads(line)
                 episode_numbers.append(record["episode"])
-                pieces.append(record["dropped_pieces"])
-        plt.plot(episode_numbers, np.log(pieces), label=experiment)
+                pieces.append(record[metric])
+        plt.plot(episode_numbers, pieces, label=experiment)
     plt.legend()
 
     mplcursors.cursor(hover=True)
