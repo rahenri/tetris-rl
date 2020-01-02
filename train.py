@@ -172,7 +172,10 @@ class NNAgent:
         ):
             b.assign(b * self.lamb + a * (1.0 - self.lamb))
         del tape
-        return loss.numpy()
+        return {
+            "loss": loss.numpy(),
+            "mean target value": target.numpy().mean(),
+        }
 
 
 def run_episode(env, agent, demo, memory, max_steps):
@@ -328,8 +331,8 @@ def train_real(episodes, name, experiment_dir, load_model, enable_gui):
 
     last_demo = time.time()
 
-    best_episode_steps = 0
     best_episode_reward = 0
+    best_episode = 0
 
     batch_size = 1 << 12
     max_steps = 1000
@@ -353,15 +356,13 @@ def train_real(episodes, name, experiment_dir, load_model, enable_gui):
                 episode_duration_per_step = (time.time() - start) / steps
 
                 recorder.end_episode()
-                dropped_pieces = env.pieces
+                steps = env.pieces
 
                 is_best = False
-                if dropped_pieces > best_episode_steps:
-                    best_episode_steps = dropped_pieces
                 if total_reward > best_episode_reward:
                     best_episode_reward = total_reward
+                    best_episode = i_episode
                     is_best = True
-
 
                 if demo:
                     last_demo = time.time()
@@ -371,24 +372,28 @@ def train_real(episodes, name, experiment_dir, load_model, enable_gui):
 
                 start_learn = time.time()
                 if memory.size() >= 1024:
-                    loss = agent.train(memory, batch_size)
+                    train_metrics = agent.train(memory, batch_size)
                 else:
-                    loss = 0
+                    train_metrics = {}
                 learn_duration = time.time() - start_learn
                 rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
 
                 metrics = {
                     "episode": i_episode,
-                    "dropped_pieces": dropped_pieces,
+                    "steps": steps,
                     "reward": total_reward,
-                    "loss": float(loss),
-                    "best episode (steps)": best_episode_steps,
-                    "best episode (reward)": best_episode_reward,
+                    "best episode reward": best_episode_reward,
+                    "best episode number": best_episode,
                     "memory size": memory.size(),
                     "train step duration (ms)": learn_duration * 1000.0,
                     "time per env step(ms)": episode_duration_per_step * 1000.0,
                     "rss (MB)": rss,
                 }
+                for k, v in train_metrics.items():
+                    metrics["train/" + k] = v
+
+                for k, v in metrics.items():
+                    metrics[k] = str(v)
                 print(
                     tabulate(
                         metrics.items(), tablefmt="psql", headers=["name", "value"]
