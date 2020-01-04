@@ -60,7 +60,7 @@ def rollout(argv):
     args = parser.parse_args(argv)
 
     gui = TetrisGUI()
-    env, _ = train.make_env(gui)
+    env, _ = train.make_env(gui, record=False)
 
     state_shape = env.observation_space.shape
     action_size = env.action_space.n
@@ -70,8 +70,8 @@ def rollout(argv):
     agent.load_model(args.load_model)
 
     while True:
-        rew, _, pieces = train.run_episode(env, agent, True)
-        print(f"reward: {rew} pieces: {pieces}")
+        rew, steps = train.run_episode(env, agent, True, None, 100000)
+        print(f"reward: {rew} steps: {steps}")
 
 
 def main():
