@@ -23,15 +23,15 @@ class Board:
         self.height = height
         self.width = width
         self.k = k
-        self.cells = np.zeros([height, width], dtype=np.int8)
+        self._cells = np.zeros([height, width], dtype=np.int8)
         self.next_row = np.zeros(width, dtype=np.int8)
         self.turn = 1
-        self.finished = False
+        self._finished = False
         self._winner = None
         self.non_full_cols = width
 
     def get(self, pos):
-        return self.cells[pos.row, pos.col]
+        return self._cells[pos.row, pos.col]
 
     def _extend(self, player, move, direction):
         count = 0
@@ -58,11 +58,11 @@ class Board:
                 return True
         return False
 
-    def move(self, column):
+    def act(self, column):
         assert 0 <= column < self.width
         row = self.next_row[column]
         assert row < self.height
-        self.cells[row, column] = self.turn
+        self._cells[row, column] = self.turn
         self.next_row[column] += 1
         if self.next_row[column] >= self.height:
             self.non_full_cols -= 1
@@ -71,16 +71,16 @@ class Board:
         over = self.has_won(move, self.turn)
         if over:
             self._winner = self.turn
-            self.finished = True
+            self._finished = True
 
         if self.non_full_cols == 0:
-            self.finished = True
+            self._finished = True
             self._winner = None
 
 
         self.turn = 3 - self.turn
 
-        return self.finished
+        return self._finished
 
     def list_moves(self):
         out = []
@@ -91,10 +91,21 @@ class Board:
 
     def __repr__(self):
         rows = []
-        for row in self.cells:
+        for row in self._cells:
             rows.append("".join(str(c) for c in row) + "\n")
         rows.reverse()
         return "".join(rows)
 
     def winner(self):
         return self._winner
+
+    def cells(self):
+        return self._cells.copy()
+
+    def cells_if_move(self, col):
+        out = self._cells.copy()
+        out[self.next_row[col]] = self.turn
+        return out
+
+    def finished(self):
+        return self._finished

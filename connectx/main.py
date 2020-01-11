@@ -5,7 +5,7 @@ import agents
 
 
 def main():
-    board = connectx_env.Board(7, 7, 4)
+    board = connectx_env.Board(height=6, width=7, k=4)
 
     agent1 = agents.RandomAgent(1)
     agent2 = agents.RandomAgent(2)

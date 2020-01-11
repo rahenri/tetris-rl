@@ -1,8 +1,9 @@
 import random
 
+
 class RandomAgent:
-    def __init__(self, player):
-        self.player = player
+    def __init__(self):
+        pass
 
     def act(self, board):
         moves = board.list_moves()
