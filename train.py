@@ -47,7 +47,7 @@ class NNAgent:
         self.action_size = action_size
         self.gamma = 0.999
         self.episilon = 0.01
-        self.lamb = 0.98
+        self.lamb = 0.99
 
         board_shape = state_shape[:2]
         self.board_shape = board_shape
