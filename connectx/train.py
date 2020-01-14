@@ -10,34 +10,23 @@ import sys
 
 import numpy as np
 import tensorflow as tf
+from tabulate import tabulate
 
 from board import Board
 from agents import RandomAgent
 from memory import Memory
 from model import Model
-from tabulate import tabulate
-
-
-# A start and reward pair
-class PastState:
-    def __init__(self, info, reward):
-        self.info = info
-        self.reward = reward
-
-    def __repr__(self):
-        return str((self.info["board"], self.reward))
 
 
 class NNAgent:
-    def __init__(self, state_shape, action_size):
+    def __init__(self, board_shape, action_size):
         self.learning_rate = 0.001
-        self.state_shape = state_shape
+        self.board_shape = board_shape
         self.action_size = action_size
-        self.gamma = 1.0
+        self.gamma = 0.95
         self.episilon = 0.01
-        self.lamb = 0.99
+        self.lamb = 0.98
 
-        board_shape = state_shape[:2]
         self.board_shape = board_shape
 
         self.value_net = Model("value", board_shape, 1)
@@ -54,19 +43,31 @@ class NNAgent:
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         self.loss_function = tf.keras.losses.MeanSquaredError()
 
-    def act(self, board, randomize=False):
-        actions = board.list_moves()
+    def act(self, env, randomize=False):
+        actions = env.board.list_moves()
         assert len(actions) > 0
 
-        if not randomize or random.random() < self.episilon:
+        if randomize and random.random() < self.episilon:
             return random.choice(actions), 0
 
         boards = []
+        rewards = []
+        endeds = []
         for a in actions:
-            boards.append(board.cells_if_move(a))
+            env_copy = env.copy()
+            reward, ended = env_copy.step(a)
+            boards.append(env_copy.obs())
+            rewards.append(reward)
+            endeds.append(ended)
 
+        endeds = np.array(endeds, dtype=np.float32)
+        rewards = np.array(rewards, dtype=np.float32)
         obs = tf.convert_to_tensor(boards, tf.float32)
-        scores = self.value_net(obs).numpy().reshape(-1)
+        scores = rewards - self.target_net(obs).numpy().reshape(-1) * (1.0 - endeds)
+
+        # if random.random() < 0.1:
+        #     print(env)
+        #     print(list(zip(actions, scores)))
 
         best_score = None
         best_action = None
@@ -86,7 +87,10 @@ class NNAgent:
         rewards = tf.convert_to_tensor(rewards, dtype=np.float32)
 
         predictions = tf.reshape(self.target_net(boards_next), [-1])
-        targets = predictions * self.gamma * not_dones + rewards
+        targets = rewards - predictions * self.gamma * not_dones
+
+        # for (i, j, k) in list(zip(boards, boards_next, targets))[:10]:
+        #     print(i.numpy(), j.numpy(), k.numpy())
 
         return boards, targets
 
@@ -118,51 +122,65 @@ class NNAgent:
         ):
             b.assign(b * self.lamb + a * (1.0 - self.lamb))
         del tape
+
+        sample_score = (
+            self.target_net([np.zeros(self.board_shape, dtype=np.float32)])
+            .numpy()
+            .reshape(-1)[0]
+        )
+
         return {
             "loss": loss.numpy(),
             "mean target value": target.numpy().mean(),
+            "sample score": sample_score,
         }
 
 
 class Env:
-    def __init__(self, enemy_first):
-        self.board = Board(6, 7, 4)
-        self.enemy = RandomAgent()
-        if enemy_first:
-            self.board.act(self.enemy.act(self.board))
-        self.player = self.board.turn
+    def __init__(self, board_shape, k):
+        self.board_shape = board_shape
+        self.k = k
+        height, width = board_shape
+        self.board = Board(height, width, k)
 
-    def _rew(self):
-        if not self.board.finished():
-            return 0
-        winner = self.board.winner()
-        if winner is None:
-            return 0
-        if winner == self.player:
-            return 1
-        return -1
+    def copy(self):
+        out = Env(self.board_shape, self.k)
+        out.board = self.board.copy()
+        return out
 
     def obs(self):
         return self.board.cells()
 
     def step(self, action):
-        ended = self.board.act(action)
-        if ended:
-            return self._rew(), True
-        enemy_action = self.enemy.act(self.board)
-        ended = self.board.act(enemy_action)
-        return self._rew(), ended
+        ended = self.board.step(action)
+        rew = 1 if ended and (self.board.winner() is not None) else 0
+        return rew, ended
+
+    def __repr__(self):
+        return repr(self.board)
 
 
-def run_episode(agent, demo, memory, max_steps, enemy_first):
-    env = Env(enemy_first)
-    obs = env.obs()
+def run_episode(agent, demo, memory, max_steps, enemy_first, board_shape, k):
+    env = Env(board_shape, k)
 
     total_reward = 0
     steps = 0
 
+    enemy = RandomAgent()
+
+    if enemy_first:
+        _rew, done = env.step(enemy.act(env.board))
+        # game won't end in one move
+        assert not done
+
     for _ in range(max_steps):
-        action, action_score = agent.act(env.board, not demo)
+        obs = env.obs()
+        action, action_score = agent.act(env, not demo)
+
+        if demo:
+            print("env step" + "-" * 80)
+            print(env)
+            print(f"action: {action} score:{action_score}")
 
         reward, done = env.step(action)
         next_obs = env.obs()
@@ -179,6 +197,15 @@ def run_episode(agent, demo, memory, max_steps, enemy_first):
 
         if done:
             break
+
+        _rew, done = env.step(enemy.act(env.board))
+        if done:
+            break
+
+    if demo:
+        print("env over" + "-" * 80)
+        print(env)
+        print(f"Reward: {total_reward}")
 
     return total_reward, steps
 
@@ -224,9 +251,13 @@ def train_real(episodes, name, experiment_dir, load_model):
     #     format='%(asctime)s %(filename)s:%(lineno)d %(message)s',
     #     level=logging.INFO, datefmt='%Y/%m/%d %H:%M:%S')
 
-    agent = NNAgent((6, 7), 7)
+    board_shape = (6, 7)
+    k = 4
+    action_size = 3
 
-    memory = Memory(10000000)
+    agent = NNAgent(board_shape, action_size)
+
+    memory = Memory(board_shape, 10000000)
 
     if load_model:
         filename = os.path.join(
@@ -248,24 +279,41 @@ def train_real(episodes, name, experiment_dir, load_model):
 
     reward_average = 0
 
+    np.set_printoptions(threshold=100000)
+    counter = 0
+
     with open(os.path.join(output_dir, "episodes.txt"), "w") as output_log:
         try:
             for i_episode in range(episodes):
                 now = time.time()
                 demo = now - last_demo > 30
+                if demo:
+                    last_demo = time.time()
 
                 filename = os.path.join(
                     output_dir, "ep_{:05d}.json.gz".format(i_episode)
                 )
 
                 want_steps = 100
+                total_rewards = []
+                steps = []
+                start = time.time()
+                # demo = True
                 while want_steps > 0:
-                    start = time.time()
-                    total_reward, steps = run_episode(
-                        agent, demo, memory, max_steps, i_episode % 2
+                    counter += 1
+                    enemy_first = counter % 2 == 1
+                    rew, step = run_episode(
+                        agent, demo, memory, max_steps, enemy_first, board_shape, k
                     )
-                    episode_duration_per_step = (time.time() - start) / steps
-                    want_steps -= steps
+                    total_rewards.append(rew)
+                    want_steps -= step
+                    steps.append(step)
+                    demo = False
+
+                episode_duration_per_step = (time.time() - start) / np.sum(steps)
+
+                total_reward = np.mean(total_rewards)
+                steps = np.mean(steps)
 
                 is_best = False
                 if total_reward > best_episode_reward:
@@ -302,11 +350,11 @@ def train_real(episodes, name, experiment_dir, load_model):
                     "time per env step(ms)": episode_duration_per_step * 1000.0,
                     "rss (MB)": rss,
                 }
-                for k, v in train_metrics.items():
-                    metrics["train/" + k] = v
+                for key, val in train_metrics.items():
+                    metrics["train/" + key] = val
 
-                for k, v in metrics.items():
-                    metrics[k] = str(v)
+                for key, val in metrics.items():
+                    metrics[key] = str(val)
                 print(
                     tabulate(
                         metrics.items(), tablefmt="psql", headers=["name", "value"]

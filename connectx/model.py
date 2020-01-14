@@ -7,10 +7,10 @@ from tensorflow.keras.layers import (
     Reshape,
     Activation,
 )
-from tensorflow.keras import Model
+from tensorflow import keras
 
 
-class Block(Model):
+class Block(keras.Model):
     def __init__(self, name, filters, layers):
         super().__init__(name=name)
 
@@ -34,7 +34,7 @@ class Block(Model):
         return x
 
 
-class Model(Model):
+class Model(keras.Model):
     def __init__(self, name, board_shape, output_shape):
         super().__init__(name=name)
 
@@ -50,7 +50,7 @@ class Model(Model):
         self._layers.extend(
             [
                 Flatten(name=f"{name}/15"),
-                Dense(1024, activation="relu", name=f"{name}/dense_1"),
+                Dense(512, activation="relu", name=f"{name}/dense_1"),
                 Dense(output_shape, activation="linear", name=f"{name}/readout"),
             ]
         )

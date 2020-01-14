@@ -2,13 +2,15 @@ import numpy as np
 
 
 class Memory:
-    def __init__(self, max_size):
+    def __init__(self, board_shape, max_size):
         self.max_size = max_size
         self.next_entry_idx = 0
         self.used_indices = 0
 
-        self.boards = np.ones([max_size, 6, 7], dtype=np.int8)
-        self.next_boards = np.ones([max_size, 6, 7], dtype=np.int8)
+        board_shape = list(board_shape)
+
+        self.boards = np.ones([max_size] + board_shape, dtype=np.int8)
+        self.next_boards = np.ones([max_size] + board_shape, dtype=np.int8)
         self.rewards = np.ones([max_size], dtype=np.int16)
         self.dones = np.ones([max_size], dtype=np.int8)
 

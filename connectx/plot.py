@@ -34,6 +34,8 @@ def main():
         minx = np.min(episode_numbers)
         maxx = np.max(episode_numbers)
 
+        num_buckets = min(num_buckets, len(values))
+
         bucket_max = [None] * num_buckets
         bucket_min = [None] * num_buckets
         bucket_sum = [0] * num_buckets
@@ -44,7 +46,10 @@ def main():
             bucket_x.append(minx + (maxx - minx) * i / num_buckets)
 
         for i, v in enumerate(values):
-            x = min(int((episode_numbers[i] - minx) / (maxx - minx) * num_buckets), num_buckets - 1)
+            x = min(
+                int((episode_numbers[i] - minx) / (maxx - minx) * num_buckets),
+                num_buckets - 1,
+            )
 
             acc = bucket_max[x]
             if acc is not None:
