@@ -12,10 +12,11 @@ import numpy as np
 import tensorflow as tf
 from tabulate import tabulate
 
-from board import Board
+from board import Board, Position
 from agents import BetterGreedyAgent
 from memory import Memory
 from model import Model
+
 
 
 class NNAgent:
@@ -49,10 +50,19 @@ class NNAgent:
         boards = []
         rewards = []
         endeds = []
-        for a in actions:
-            env_copy = env.copy()
-            reward, ended = env_copy.step(a)
-            boards.append(env_copy.obs())
+        board = env.board
+        player = board.turn()
+        for action in actions:
+            row = board.row(action)
+            pos = Position(row, action)
+            reward = 0
+            board_copy = board.copy()
+            if board_copy.would_win(pos, player):
+                reward += 1000000
+            elif board_copy.would_win(pos, 3 - player):
+                reward += 1000
+            ended = board_copy.step(action)
+            boards.append(board_copy.cells())
             rewards.append(reward)
             endeds.append(ended)
 
