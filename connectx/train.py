@@ -13,27 +13,23 @@ import tensorflow as tf
 from tabulate import tabulate
 
 from board import Board
-from agents import RandomAgent
+from agents import BetterGreedyAgent
 from memory import Memory
 from model import Model
 
 
 class NNAgent:
-    def __init__(self, board_shape, action_size):
+    def __init__(self, board_shape):
         self.learning_rate = 0.001
         self.board_shape = board_shape
-        self.action_size = action_size
         self.gamma = 0.95
-        self.episilon = 0.01
+        self.episilon = 0.1
         self.lamb = 0.98
 
         self.board_shape = board_shape
 
         self.value_net = Model("value", board_shape, 1)
         self.target_net = Model("target", board_shape, 1)
-
-        self.value_net.build(input_shape=(None,) + board_shape)
-        self.target_net.build(input_shape=(None,) + board_shape)
 
         for var, var_target in zip(
             self.value_net.trainable_variables, self.target_net.trainable_variables,
@@ -62,7 +58,7 @@ class NNAgent:
 
         endeds = np.array(endeds, dtype=np.float32)
         rewards = np.array(rewards, dtype=np.float32)
-        obs = tf.convert_to_tensor(boards, tf.float32)
+        obs = tf.convert_to_tensor(boards, tf.int32)
         scores = rewards - self.target_net(obs).numpy().reshape(-1) * (1.0 - endeds)
 
         # if random.random() < 0.1:
@@ -81,10 +77,10 @@ class NNAgent:
     def _make_features(self, memory, batch_size):
         boards, next_boards, rewards, dones = memory.sample(batch_size)
 
-        boards = tf.convert_to_tensor(boards, dtype=np.float32)
-        boards_next = tf.convert_to_tensor(next_boards, dtype=np.float32)
-        not_dones = tf.convert_to_tensor(1 - dones, dtype=np.float32)
-        rewards = tf.convert_to_tensor(rewards, dtype=np.float32)
+        boards = tf.convert_to_tensor(boards, dtype=tf.int32)
+        boards_next = tf.convert_to_tensor(next_boards, dtype=tf.int32)
+        not_dones = tf.convert_to_tensor(1 - dones, dtype=tf.float32)
+        rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
 
         predictions = tf.reshape(self.target_net(boards_next), [-1])
         targets = rewards - predictions * self.gamma * not_dones
@@ -166,7 +162,7 @@ def run_episode(agent, demo, memory, max_steps, enemy_first, board_shape, k):
     total_reward = 0
     steps = 0
 
-    enemy = RandomAgent()
+    enemy = BetterGreedyAgent()
 
     if enemy_first:
         _rew, done = env.step(enemy.act(env.board))
@@ -198,7 +194,8 @@ def run_episode(agent, demo, memory, max_steps, enemy_first, board_shape, k):
         if done:
             break
 
-        _rew, done = env.step(enemy.act(env.board))
+        rew, done = env.step(enemy.act(env.board))
+        total_reward -= rew
         if done:
             break
 
@@ -253,9 +250,8 @@ def train_real(episodes, name, experiment_dir, load_model):
 
     board_shape = (6, 7)
     k = 4
-    action_size = 3
 
-    agent = NNAgent(board_shape, action_size)
+    agent = NNAgent(board_shape)
 
     memory = Memory(board_shape, 10000000)
 

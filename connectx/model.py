@@ -1,3 +1,6 @@
+import tensorflow as tf
+import numpy as np
+
 from tensorflow.keras.layers import (
     Dense,
     Flatten,
@@ -11,7 +14,7 @@ from tensorflow import keras
 
 
 class Block(keras.Model):
-    def __init__(self, name, filters, layers):
+    def __init__(self, name, filters, layers, max_pool=False):
         super().__init__(name=name)
 
         self._layers = []
@@ -26,38 +29,47 @@ class Block(keras.Model):
                     name=f"{name}/conv_{i}",
                 )
             )
-        self._layers.append(MaxPooling2D(name=f"{name}/3"))
+        if max_pool:
+            self._layers.append(MaxPooling2D(name=f"{name}/3"))
 
-    def call(self, x, training=False):
+    def call(self, tensor, training=False):
         for layer in self._layers:
-            x = layer(x, training=training)
-        return x
+            tensor = layer(tensor, training=training)
+        return tensor
 
 
 class Model(keras.Model):
     def __init__(self, name, board_shape, output_shape):
         super().__init__(name=name)
 
-        self._layers = [
-            Reshape(
-                list(board_shape) + [1], input_shape=board_shape, name=f"{name}/reshape"
+        self.blocks = []
+
+        # self.blocks = [
+        #     Reshape(
+        #         list(board_shape) + [1], input_shape=board_shape, name=f"{name}/reshape"
+        #     )
+        # ]
+
+        # for i, size in enumerate([32, 64]):
+        #     self.blocks.append(Block(name=f"{name}/block_{i}", filters=size, layers=2))
+
+        self.blocks.append(Flatten(name=f"{name}/flatten"))
+
+        for i, units in enumerate([512, 512, 512]):
+            self.blocks.append(
+                Dense(units, activation="relu", name=f"{name}/dense_{i+1}")
             )
-        ]
 
-        for i, size in enumerate([32, 64]):
-            self._layers.append(Block(name=f"{name}/block_{i}", filters=size, layers=2))
-
-        self._layers.extend(
-            [
-                Flatten(name=f"{name}/15"),
-                Dense(512, activation="relu", name=f"{name}/dense_1"),
-                Dense(output_shape, activation="linear", name=f"{name}/readout"),
-            ]
+        self.blocks.append(
+            Dense(output_shape, activation="sigmoid", name=f"{name}/readout")
         )
 
-        self._layers.append(Activation("sigmoid"))
+        inputs = tf.convert_to_tensor(np.zeros([1] + list(board_shape), dtype=np.int32))
+        self(inputs)
 
-    def call(self, x, training=False):
-        for layer in self._layers:
-            x = layer(x, training=training)
-        return x * 2 - 1
+    @tf.function
+    def call(self, tensor, training=False):
+        tensor = tf.one_hot(tensor, 3)
+        for layer in self.blocks:
+            tensor = layer(tensor, training=training)
+        return tensor * 2 - 1

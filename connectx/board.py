@@ -15,7 +15,7 @@ class Position:
         return Position(-self.row, -self.col)
 
 
-DIRECTIONS = [Position(1, 0), Position(0, 1), Position(1, -1), Position(-1, 1)]
+DIRECTIONS = [Position(1, 0), Position(0, 1), Position(1, -1), Position(1, 1)]
 
 
 class Board:
@@ -61,7 +61,10 @@ class Board:
             count += 1
         return count
 
-    def has_won(self, move, player):
+    def row(self, col):
+        return self._next_row[col]
+
+    def would_win(self, move, player):
         for direction in DIRECTIONS:
             count = 1 + self._extend(player, move, direction)
             count += self._extend(player, move, direction.oposite())
@@ -80,7 +83,7 @@ class Board:
             self._non_full_cols -= 1
 
         move = Position(row, column)
-        over = self.has_won(move, self._turn)
+        over = self.would_win(move, self._turn)
         if over:
             self._winner = self._turn
             self._finished = True
