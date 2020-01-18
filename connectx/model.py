@@ -54,12 +54,18 @@ class Model(keras.Model):
         # for i, size in enumerate([32, 64]):
         #     self.blocks.append(Block(name=f"{name}/block_{i}", filters=size, layers=2))
 
-        self.blocks.append(Flatten(name=f"{name}/flatten"))
+        self.blocks.append(Flatten(name=f"{name}/board/flatten"))
 
         for i, units in enumerate([512, 512, 512]):
             self.blocks.append(
-                Dense(units, activation="relu", name=f"{name}/dense_{i+1}")
+                Dense(units, activation="relu", name=f"{name}/board/dense_{i+1}")
             )
+
+        self.turn_model = Dense(512, activation="linear", name=f"{name}/turn")
+
+        self.tail = []
+        for i, units in enumerate([512, 512, 512]):
+            self.tail.append(Dense(units, activation="relu", name=f"{name}/tail_{i+1}"))
 
         self.readout = Dense(1, activation="sigmoid", name=f"{name}/readout")
 
@@ -73,8 +79,13 @@ class Model(keras.Model):
             tensor = layer(tensor, training=training)
 
         turns = tf.cast(tf.reshape(obs.turns, [-1, 1]), tf.float32)
-        tensor = tf.concat([tensor, turns], -1)
+        turns = self.turn_model(turns, training=training)
 
-        tensor = self.readout(tensor)
+        tensor = turns * tensor
+
+        for layer in self.tail:
+            tensor = layer(tensor, training=training)
+
+        tensor = self.readout(tensor, training=training)
 
         return tensor * 2 - 1
