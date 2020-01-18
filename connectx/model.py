@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+from observation import ObservationVector, SingleObservation
 
 from tensorflow.keras.layers import (
     Dense,
@@ -39,7 +40,7 @@ class Block(keras.Model):
 
 
 class Model(keras.Model):
-    def __init__(self, name, board_shape, output_shape):
+    def __init__(self, name, board_shape):
         super().__init__(name=name)
 
         self.blocks = []
@@ -60,16 +61,20 @@ class Model(keras.Model):
                 Dense(units, activation="relu", name=f"{name}/dense_{i+1}")
             )
 
-        self.blocks.append(
-            Dense(output_shape, activation="sigmoid", name=f"{name}/readout")
-        )
+        self.readout = Dense(1, activation="sigmoid", name=f"{name}/readout")
 
-        inputs = tf.convert_to_tensor(np.zeros([1] + list(board_shape), dtype=np.int32))
+        board = tf.convert_to_tensor(np.zeros(board_shape, dtype=np.int32))
+        inputs = ObservationVector.from_list(board_shape, [SingleObservation(board, 0)])
         self(inputs)
 
-    @tf.function
-    def call(self, tensor, training=False):
-        tensor = tf.one_hot(tensor, 3)
+    def call(self, obs, training=False):
+        tensor = tf.one_hot(obs.boards, 3)
         for layer in self.blocks:
             tensor = layer(tensor, training=training)
+
+        turns = tf.cast(tf.reshape(obs.turns, [-1, 1]), tf.float32)
+        tensor = tf.concat([tensor, turns], -1)
+
+        tensor = self.readout(tensor)
+
         return tensor * 2 - 1

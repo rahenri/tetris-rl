@@ -16,7 +16,7 @@ from board import Board, Position
 from agents import BetterGreedyAgent
 from memory import Memory
 from model import Model
-
+from observation import SingleObservation, ObservationVector
 
 
 class NNAgent:
@@ -29,8 +29,8 @@ class NNAgent:
 
         self.board_shape = board_shape
 
-        self.value_net = Model("value", board_shape, 1)
-        self.target_net = Model("target", board_shape, 1)
+        self.value_net = Model("value", board_shape)
+        self.target_net = Model("target", board_shape)
 
         for var, var_target in zip(
             self.value_net.trainable_variables, self.target_net.trainable_variables,
@@ -40,40 +40,36 @@ class NNAgent:
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
         self.loss_function = tf.keras.losses.MeanSquaredError()
 
-    def act(self, env, randomize=False):
+    def act(self, env, randomize=False, verbose=False):
         actions = env.board.list_moves()
         assert len(actions) > 0
 
         if randomize and random.random() < self.episilon:
             return random.choice(actions), 0
 
-        boards = []
+        obs = []
         rewards = []
         endeds = []
-        board = env.board
-        player = board.turn()
+        player = env.turn()
         for action in actions:
-            row = board.row(action)
-            pos = Position(row, action)
+            env_copy = env.copy()
             reward = 0
-            board_copy = board.copy()
-            if board_copy.would_win(pos, player):
+            if env_copy.would_win(action, player):
                 reward += 1000000
-            elif board_copy.would_win(pos, 3 - player):
+            elif env_copy.would_win(action, 3 - player):
                 reward += 1000
-            ended = board_copy.step(action)
-            boards.append(board_copy.cells())
+            _, ended = env_copy.step(action)
+            obs.append(env_copy.obs())
             rewards.append(reward)
             endeds.append(ended)
 
         endeds = np.array(endeds, dtype=np.float32)
         rewards = np.array(rewards, dtype=np.float32)
-        obs = tf.convert_to_tensor(boards, tf.int32)
+        obs = ObservationVector.from_list(self.board_shape, obs)
         scores = rewards - self.target_net(obs).numpy().reshape(-1) * (1.0 - endeds)
 
-        # if random.random() < 0.1:
-        #     print(env)
-        #     print(list(zip(actions, scores)))
+        if verbose:
+            print(list(zip(actions, scores)))
 
         best_score = None
         best_action = None
@@ -85,20 +81,15 @@ class NNAgent:
         return best_action, best_score
 
     def _make_features(self, memory, batch_size):
-        boards, next_boards, rewards, dones = memory.sample(batch_size)
+        obs, next_obs, rewards, dones = memory.sample(batch_size)
 
-        boards = tf.convert_to_tensor(boards, dtype=tf.int32)
-        boards_next = tf.convert_to_tensor(next_boards, dtype=tf.int32)
         not_dones = tf.convert_to_tensor(1 - dones, dtype=tf.float32)
         rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
 
-        predictions = tf.reshape(self.target_net(boards_next), [-1])
+        predictions = tf.reshape(self.target_net(next_obs), [-1])
         targets = rewards - predictions * self.gamma * not_dones
 
-        # for (i, j, k) in list(zip(boards, boards_next, targets))[:10]:
-        #     print(i.numpy(), j.numpy(), k.numpy())
-
-        return boards, targets
+        return obs, targets
 
     def trainable_variables(self):
         return self.value_net.trainable_variables + self.target_net.trainable_variables
@@ -114,10 +105,10 @@ class NNAgent:
             v.assign(tensors[name])
 
     def train(self, memory, batch_size):
-        features, target = self._make_features(memory, batch_size)
+        obs, target = self._make_features(memory, batch_size)
 
         with tf.GradientTape() as tape:
-            predicions = self.value_net(features, training=True)
+            predicions = self.value_net(obs, training=True)
             loss = self.loss_function(target, predicions)
         gradients = tape.gradient(loss, self.value_net.trainable_variables)
         self.optimizer.apply_gradients(
@@ -129,11 +120,12 @@ class NNAgent:
             b.assign(b * self.lamb + a * (1.0 - self.lamb))
         del tape
 
-        sample_score = (
-            self.target_net([np.zeros(self.board_shape, dtype=np.float32)])
-            .numpy()
-            .reshape(-1)[0]
+        sample_obs = ObservationVector.from_list(
+            self.board_shape,
+            [SingleObservation(np.zeros(self.board_shape, dtype=np.int8), 0)],
         )
+
+        sample_score = self.target_net(sample_obs).numpy().reshape(-1)[0]
 
         return {
             "loss": loss.numpy(),
@@ -155,12 +147,20 @@ class Env:
         return out
 
     def obs(self):
-        return self.board.cells()
+        return SingleObservation(self.board.cells(), self.board.turn() - 1)
+
+    def would_win(self, action, player):
+        row = self.board.row(action)
+        pos = Position(row, action)
+        return self.board.would_win(pos, player)
 
     def step(self, action):
         ended = self.board.step(action)
         rew = 1 if ended and (self.board.winner() is not None) else 0
         return rew, ended
+
+    def turn(self):
+        return self.board.turn()
 
     def __repr__(self):
         return repr(self.board)
@@ -180,12 +180,14 @@ def run_episode(agent, demo, memory, max_steps, enemy_first, board_shape, k):
         assert not done
 
     for _ in range(max_steps):
-        obs = env.obs()
-        action, action_score = agent.act(env, not demo)
-
         if demo:
             print("env step" + "-" * 80)
             print(env)
+
+        obs = env.obs()
+        action, action_score = agent.act(env, randomize=not demo, verbose=demo)
+
+        if demo:
             print(f"action: {action} score:{action_score}")
 
         reward, done = env.step(action)
