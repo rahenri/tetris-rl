@@ -302,19 +302,17 @@ def train_real(episodes, name, experiment_dir, load_model):
                     output_dir, "ep_{:05d}.json.gz".format(i_episode)
                 )
 
-                want_steps = 100
                 total_rewards = []
                 steps = []
                 start = time.time()
                 # demo = True
-                while want_steps > 0:
+                for _ in range(15):
                     counter += 1
                     enemy_first = counter % 2 == 1
                     rew, step = run_episode(
                         agent, demo, memory, max_steps, enemy_first, board_shape, k
                     )
                     total_rewards.append(rew)
-                    want_steps -= step
                     steps.append(step)
                     demo = False
 
@@ -323,9 +321,12 @@ def train_real(episodes, name, experiment_dir, load_model):
                 total_reward = np.mean(total_rewards)
                 steps = np.mean(steps)
 
+                a = 0.96
+                reward_average = reward_average * a + total_reward * (1 - a)
+
                 is_best = False
-                if total_reward > best_episode_reward:
-                    best_episode_reward = total_reward
+                if i_episode > 100 and reward_average > best_episode_reward:
+                    best_episode_reward = reward_average
                     best_episode = i_episode
                     is_best = True
 
@@ -342,9 +343,6 @@ def train_real(episodes, name, experiment_dir, load_model):
                     train_metrics = {}
                 learn_duration = time.time() - start_learn
                 rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
-
-                a = 0.96
-                reward_average = reward_average * a + total_reward * (1 - a)
 
                 metrics = {
                     "episode": i_episode,

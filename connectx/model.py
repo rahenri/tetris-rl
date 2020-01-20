@@ -73,12 +73,13 @@ class Model(keras.Model):
         inputs = ObservationVector.from_list(board_shape, [SingleObservation(board, 0)])
         self(inputs)
 
-    def call(self, obs, training=False):
-        tensor = tf.one_hot(obs.boards, 3)
+    @tf.function
+    def call_fn(self, boards, turns, training=False):
+        tensor = tf.one_hot(boards, 3)
         for layer in self.blocks:
             tensor = layer(tensor, training=training)
 
-        turns = tf.cast(tf.reshape(obs.turns, [-1, 1]), tf.float32)
+        turns = tf.cast(tf.reshape(turns, [-1, 1]), tf.float32)
         turns = self.turn_model(turns, training=training)
 
         tensor = turns * tensor
@@ -89,3 +90,10 @@ class Model(keras.Model):
         tensor = self.readout(tensor, training=training)
 
         return tensor * 2 - 1
+
+    def call(self, obs, training=False):
+        return self.call_fn(
+            tf.convert_to_tensor(obs.boards, tf.int32),
+            tf.convert_to_tensor(obs.turns, tf.float32),
+            training,
+        )

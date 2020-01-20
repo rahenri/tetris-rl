@@ -19,7 +19,7 @@ def main():
         help="Directory containing experiments",
     )
     parser.add_argument(
-        "--metric", default="reward_average", type=str, help="Metric to plot",
+        "--metric", default="reward", type=str, help="Metric to plot",
     )
     args = parser.parse_args()
     metric = args.metric
