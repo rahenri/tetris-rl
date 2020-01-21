@@ -289,6 +289,7 @@ def train_real(episodes, name, experiment_dir, load_model):
 
     np.set_printoptions(threshold=100000)
     counter = 0
+    smoothing = 0.96
 
     with open(os.path.join(output_dir, "episodes.txt"), "w") as output_log:
         try:
@@ -321,8 +322,7 @@ def train_real(episodes, name, experiment_dir, load_model):
                 total_reward = np.mean(total_rewards)
                 steps = np.mean(steps)
 
-                a = 0.96
-                reward_average = reward_average * a + total_reward * (1 - a)
+                reward_average += (1 - smoothing) * (total_reward - reward_average)
 
                 is_best = False
                 if i_episode > 100 and reward_average > best_episode_reward:
