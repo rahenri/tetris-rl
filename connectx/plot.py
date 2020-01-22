@@ -24,7 +24,7 @@ def main():
     args = parser.parse_args()
     metric = args.metric
     max_num_buckets = 400
-    smoothing = 0.9
+    smoothing = 0.98
 
     for experiment in args.experiments:
         filename = os.path.join(args.experiment_dir, experiment, "episodes.txt")
@@ -35,13 +35,17 @@ def main():
                 record = json.loads(line)
                 episode_numbers.append(int(record["episode"]))
                 values.append(float(record.get(metric, 0)))
+
+        acc = values[0]
+        for i, v in enumerate(values):
+            acc = acc * smoothing + v * (1.0 - smoothing)
+            values[i] = acc
+
         minx = np.min(episode_numbers)
         maxx = np.max(episode_numbers)
 
         num_buckets = min(max_num_buckets, len(values))
 
-        bucket_max = [None] * num_buckets
-        bucket_min = [None] * num_buckets
         bucket_sum = [0] * num_buckets
         bucket_count = [0] * num_buckets
 
@@ -59,15 +63,9 @@ def main():
             bucket_count[x] += 1
 
         bucket_mean = np.array(bucket_sum) / np.array(bucket_count)
-        bucket_mean_smoothed = bucket_mean.copy()
 
-        last = bucket_mean[0]
-        for i in range(1, len(bucket_mean)):
-            last = last * smoothing + bucket_mean[i] * (1.0 - smoothing)
-            bucket_mean_smoothed[i] = last
-
-        plt.plot(bucket_x, bucket_mean, label=f"{experiment}")
-        plt.plot(bucket_x, bucket_mean_smoothed, label=f"{experiment} smoothed")
+        # plt.plot(bucket_x, bucket_mean, label=f"{experiment}")
+        plt.plot(bucket_x, bucket_mean, label=f"{experiment} smoothed ({smoothing})")
     plt.legend()
 
     mplcursors.cursor(hover=True)

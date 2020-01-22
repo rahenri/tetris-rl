@@ -307,7 +307,7 @@ def train_real(episodes, name, experiment_dir, load_model):
                 steps = []
                 start = time.time()
                 # demo = True
-                for _ in range(15):
+                for _ in range(30):
                     counter += 1
                     enemy_first = counter % 2 == 1
                     rew, step = run_episode(
