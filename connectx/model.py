@@ -7,6 +7,7 @@ from tensorflow.keras.layers import (
     Flatten,
     Conv2D,
     MaxPooling2D,
+    AveragePooling2D,
     Dropout,
     Reshape,
     Activation,
@@ -54,17 +55,36 @@ class Model(keras.Model):
         # for i, size in enumerate([32, 64]):
         #     self.blocks.append(Block(name=f"{name}/block_{i}", filters=size, layers=2))
 
+        # self.blocks.append(Flatten(name=f"{name}/board/flatten"))
+
+        # for i, units in enumerate([256, 256]):
+        #     self.blocks.append(
+        #         Dense(units, activation="relu", name=f"{name}/board/dense_{i+1}")
+        #     )
+
+        self.blocks.append(
+            Conv2D(32, 3, padding="valid", activation="relu", name=f"{name}/conv_1",)
+        )
+        self.blocks.append(
+            Conv2D(32, 3, padding="same", activation="relu", name=f"{name}/conv_2",)
+        )
+        self.blocks.append(
+            Conv2D(32, 3, padding="valid", activation="relu", name=f"{name}/conv_2",)
+        )
+        self.blocks.append(
+            Conv2D(32, 3, padding="same", activation="relu", name=f"{name}/conv_2",)
+        )
+        self.blocks.append(
+            AveragePooling2D([2, 3], 3, padding="valid", name=f"{name}/conv_2",)
+        )
+
         self.blocks.append(Flatten(name=f"{name}/board/flatten"))
+        self.blocks.append(Dense(128, activation="relu", name=f"{name}/board_to_flat"))
 
-        for i, units in enumerate([512, 512, 512]):
-            self.blocks.append(
-                Dense(units, activation="relu", name=f"{name}/board/dense_{i+1}")
-            )
-
-        self.turn_model = Dense(512, activation="linear", name=f"{name}/turn")
+        self.turn_model = Dense(128, activation="linear", name=f"{name}/turn")
 
         self.tail = []
-        for i, units in enumerate([512, 512, 512]):
+        for i, units in enumerate([128, 128]):
             self.tail.append(Dense(units, activation="relu", name=f"{name}/tail_{i+1}"))
 
         self.readout = Dense(1, activation="sigmoid", name=f"{name}/readout")
