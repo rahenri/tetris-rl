@@ -16,7 +16,8 @@ def prod(values):
 
 class NNAgent:
     def __init__(self, board_shape):
-        self.learning_rate = 0.001
+        self.learning_rate_var = tf.Variable(0.001)
+
         self.board_shape = board_shape
         self.gamma = 0.95
         self.episilon = 0.1
@@ -40,7 +41,7 @@ class NNAgent:
             print(f"{var.name}: {w} ({w / weights * 100:.1f}%)")
         print(f"Weights: {weights}")
 
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate_var)
         self.loss_function = tf.keras.losses.MeanSquaredError()
 
     def act(self, env, randomize=False, verbose=False):
@@ -128,10 +129,27 @@ class NNAgent:
             [SingleObservation(np.zeros(self.board_shape, dtype=np.int8), 0)],
         )
 
+        total_weigth = 0
+        for variable in self.value_net.trainable_variables:
+            total_weigth += tf.reduce_sum(variable * variable)
+        total_weigth = np.sqrt(total_weigth.numpy())
+
         sample_score = self.target_net(sample_obs).numpy().reshape(-1)[0]
 
         return {
             "loss": loss.numpy(),
             "mean target value": target.numpy().mean(),
             "sample score": sample_score,
+            "weight magnitude": total_weigth,
+            "learning rate": self.learning_rate_var.numpy(),
         }
+
+    def update_config(self, new_config):
+        if "learning_rate" not in new_config:
+            return False, "Missing learning_rate key"
+        learning_rate = float(new_config["learning_rate"])
+        self.learning_rate_var.assign(learning_rate)
+        return True, "ok"
+
+    def current_config(self):
+        return {"learning_rate": float(self.learning_rate_var.numpy())}

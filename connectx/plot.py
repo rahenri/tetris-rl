@@ -23,7 +23,7 @@ def main():
     )
     args = parser.parse_args()
     metric = args.metric
-    max_num_buckets = 400
+    max_num_buckets = 800
     smoothing = 0.98
 
     for experiment in args.experiments:

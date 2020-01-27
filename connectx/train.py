@@ -11,10 +11,12 @@ import numpy as np
 from tabulate import tabulate
 
 from board import Board, Position
-from agents import BetterGreedyAgent
+import agents
 from memory import Memory
 from observation import SingleObservation
 from nnagent import NNAgent
+from config_manager import ConfigManager
+import httpui
 
 
 class Env:
@@ -55,7 +57,7 @@ def run_episode(agent, demo, memory, max_steps, enemy_first, board_shape, k):
     total_reward = 0
     steps = 0
 
-    enemy = BetterGreedyAgent()
+    enemy = agents.BetterGreedyAgent()
 
     if enemy_first:
         _rew, done = env.step(enemy.act(env.board))
@@ -102,7 +104,7 @@ def run_episode(agent, demo, memory, max_steps, enemy_first, board_shape, k):
     return total_reward, steps
 
 
-def train(argv):
+def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--episodes", default=100, type=int, help="Number of episodes to run"
@@ -127,10 +129,10 @@ def train(argv):
     )
     args = parser.parse_args(argv)
 
-    return train_real(args.episodes, args.name, args.experiment_dir, args.load_model)
+    return train(args.episodes, args.name, args.experiment_dir, args.load_model)
 
 
-def train_real(episodes, name, experiment_dir, load_model):
+def train(episodes, name, experiment_dir, load_model):
 
     output_dir = os.path.join(experiment_dir, name)
 
@@ -147,6 +149,9 @@ def train_real(episodes, name, experiment_dir, load_model):
     k = 4
 
     agent = NNAgent(board_shape)
+
+    config_manager = ConfigManager(agent.update_config, agent.current_config())
+    httpui.run_http_server(config_manager)
 
     memory = Memory(board_shape, 100000000)
 
@@ -177,6 +182,8 @@ def train_real(episodes, name, experiment_dir, load_model):
     with open(os.path.join(output_dir, "episodes.txt"), "w") as output_log:
         try:
             for i_episode in range(episodes):
+                config_manager.handle_events()
+
                 now = time.time()
                 demo = now - last_demo > 30
                 if demo:
@@ -257,4 +264,4 @@ def train_real(episodes, name, experiment_dir, load_model):
 
 
 if __name__ == "__main__":
-    train(sys.argv[1:])
+    main(sys.argv[1:])

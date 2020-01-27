@@ -1,31 +1,25 @@
 #!/usr/bin/env python3
 
-import connectx_env
-import agents
+import train
+import nnagent
 
 
 def main():
-    board = connectx_env.Board(height=6, width=7, k=4)
+    board_shape = [6, 7]
 
-    agent1 = agents.RandomAgent(1)
-    agent2 = agents.RandomAgent(2)
-    print(board)
+    agent = nnagent.NNAgent(board_shape)
+    agent.load_model("experiments/test7/model_snapshots/model.npz")
+    env = train.Env(board_shape, k=4)
 
     while True:
-        move = agent1.act(board)
-        over = board.move(move)
-        print(board)
-        if over:
-            break
+        action, action_score = agent.act(env, randomize=False, verbose=True)
+        print(env)
+        print(f"action: {action} score:{action_score}")
 
-        move = agent2.act(board)
-        over = board.move(move)
-        print(board)
-        if over:
+        reward, done = env.step(action)
+        if done:
+            print(reward)
             break
-
-    print("game over")
-    print(f"winner is {board.winner()}")
 
 
 if __name__ == "__main__":

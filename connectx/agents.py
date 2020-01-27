@@ -56,3 +56,34 @@ class BetterGreedyAgent:
         best_moves = [action for action, score in scored_actions if score == best_score]
 
         return random.choice(best_moves)
+
+
+class BestGreedyAgent:
+    def __init__(self):
+        pass
+
+    def act(self, board):
+        player = board.turn()
+        actions = board.list_moves()
+        scored_actions = []
+        middle = board.width // 2
+        for action in actions:
+            row = board.row(action)
+            pos = Position(row, action)
+
+            score = 0
+            if board.would_win(pos, player):
+                score += 1000000
+            if board.would_win(pos, 3 - player):
+                score += 1000
+
+            score += middle - abs(middle - action)
+
+            scored_actions.append((action, score))
+
+        scored_actions.sort(key=lambda value: -value[1])
+        best_score = scored_actions[0][1]
+
+        best_moves = [action for action, score in scored_actions if score == best_score]
+
+        return random.choice(best_moves)
