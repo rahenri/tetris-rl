@@ -22,6 +22,8 @@ class HTTPHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b"Moved")
 
     def handle_get(self):
+        query_components = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=UTF-8")
         self.send_header("Cache-Control", "no-cache")
@@ -30,6 +32,12 @@ class HTTPHandler(http.server.BaseHTTPRequestHandler):
         config = self.config_manager.current_config()
 
         rows = []
+
+        message = query_components.get("message", None)
+        if message:
+            message = message[0]
+            rows.append(f"<div>{message}</div>")
+
         for k, v in config.items():
             v = format_value(v)
             rows.append(f"<div>{k} <input type='text' name='{k}' value='{v}'></div>")
@@ -63,6 +71,11 @@ class HTTPHandler(http.server.BaseHTTPRequestHandler):
         print(config)
 
         updated, message = self.config_manager.push_update(config)
+
+        if updated:
+            message = f"Config updated succesfully"
+        else:
+            message = f"Failed to update config: {message}"
 
         self.redirect(f"/?message={message}")
 
