@@ -16,7 +16,7 @@ from memory import Memory
 from observation import SingleObservation
 from nnagent import NNAgent
 from config_manager import ConfigManager
-import httpui
+import webui
 
 
 class Env:
@@ -151,7 +151,7 @@ def train(episodes, name, experiment_dir, load_model):
     agent = NNAgent(board_shape)
 
     config_manager = ConfigManager(agent.update_config, agent.current_config())
-    httpui.run_http_server(config_manager)
+    webui.run_http_server(config_manager)
 
     memory = Memory(board_shape, 100000000)
 

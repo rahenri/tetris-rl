@@ -98,7 +98,7 @@ def run_http_server(config_manager):
 
     def start():
         server_address = ("", 8080)
-        httpd = http.server.ThreadingHTTPServer(server_address, create_handler)
+        httpd = http.server.HTTPServer(server_address, create_handler)
         httpd.serve_forever()
 
     t = threading.Thread(target=start, daemon=True)
