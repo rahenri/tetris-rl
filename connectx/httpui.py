@@ -31,19 +31,25 @@ class HTTPHandler(http.server.BaseHTTPRequestHandler):
 
         config = self.config_manager.current_config()
 
-        rows = []
+        content = []
 
         message = query_components.get("message", None)
         if message:
             message = message[0]
-            rows.append(f"<div>{message}</div>")
+            content.append(f"<div>{message}</div>")
 
+        table_rows = []
         for k, v in config.items():
             v = format_value(v)
-            rows.append(f"<div>{k} <input type='text' name='{k}' value='{v}'></div>")
+            table_rows.append(
+                f"<tr><td>{k}</td><td><input type='text' name='{k}' value='{v}'></td></tr>"
+            )
 
-        rows.append("<input type='submit' value='Push'>")
-        content = "".join(rows)
+        content.append(f"<table>{''.join(table_rows)}</table>")
+
+        content.append("<input type='submit' value='Push'>")
+
+        content = "".join(content)
 
         form = f"<form action='/update' method='post'>{content}</form>"
 

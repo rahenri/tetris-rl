@@ -145,11 +145,23 @@ class NNAgent:
         }
 
     def update_config(self, new_config):
-        if "learning_rate" not in new_config:
-            return False, "Missing learning_rate key"
+        keys = ["learning_rate", "gamma", "episilon", "lambda"]
+        for key in keys:
+            if key not in new_config:
+                return False, f"Missing {key} key"
         learning_rate = float(new_config["learning_rate"])
         self.learning_rate_var.assign(learning_rate)
+
+        self.gamma = float(new_config["gamma"])
+        self.episilon = float(new_config["episilon"])
+        self.lamb = float(new_config["lamgda"])
+
         return True, "ok"
 
     def current_config(self):
-        return {"learning_rate": float(self.learning_rate_var.numpy())}
+        return {
+            "learning_rate": float(self.learning_rate_var.numpy()),
+            "gamma": self.gamma,
+            "episilon": self.episilon,
+            "lambda": self.lamb,
+        }
