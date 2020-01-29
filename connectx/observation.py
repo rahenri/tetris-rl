@@ -6,6 +6,9 @@ class SingleObservation:
         self.board = board
         self.turn = turn
 
+    def __repr__(self):
+        return repr(self.board)
+
 
 class ObservationVector:
     def __init__(self, board_shape, size=None):

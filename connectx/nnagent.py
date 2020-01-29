@@ -154,7 +154,7 @@ class NNAgent:
 
         self.gamma = float(new_config["gamma"])
         self.episilon = float(new_config["episilon"])
-        self.lamb = float(new_config["lamgda"])
+        self.lamb = float(new_config["lambda"])
 
         return True, "ok"
 
