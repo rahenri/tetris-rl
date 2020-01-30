@@ -8,6 +8,7 @@ import resource
 import sys
 import multiprocessing
 import shutil
+import queue
 import random
 
 import numpy as np
@@ -54,36 +55,24 @@ class Env:
         return repr(self.board)
 
 
-def run_episode(agent, demo, max_steps, enemy_first, board_shape, k):
+def run_episode(agent, verbose, max_steps, board_shape, k, randomize):
     env = Env(board_shape, k)
-
-    total_reward = 0
-    steps = 0
-
-    enemy = agents.BetterGreedyAgent()
-
-    if enemy_first:
-        _rew, done = env.step(enemy.act(env.board))
-        # game won't end in one move
-        assert not done
 
     transitions = []
 
     for _ in range(max_steps):
-        if demo:
+        if verbose:
             print("env step" + "-" * 80)
             print(env)
 
         obs = env.obs()
-        action, action_score = agent.act(env, randomize=not demo, verbose=demo)
+        action, action_score = agent.act(env, randomize=randomize, verbose=verbose)
 
-        if demo:
+        if verbose:
             print(f"action: {action} score:{action_score}")
 
         reward, done = env.step(action)
         next_obs = env.obs()
-        total_reward += reward
-        steps += 1
 
         if done:
             next_obs = None
@@ -93,28 +82,67 @@ def run_episode(agent, demo, max_steps, enemy_first, board_shape, k):
         if done:
             break
 
+    return transitions
+
+
+def run_evaluation_episode(
+    agent, enemy_cls, verbose, max_steps, enemy_first, board_shape, k, randomize
+):
+    env = Env(board_shape, k)
+
+    total_reward = 0
+    steps = 0
+
+    enemy = enemy_cls()
+
+    if enemy_first:
+        _rew, done = env.step(enemy.act(env.board))
+        # game won't end in one move
+        assert not done
+
+    for _ in range(max_steps):
+        if verbose:
+            print("env step" + "-" * 80)
+            print(env)
+
+        action, action_score = agent.act(env, randomize=randomize, verbose=verbose)
+
+        if verbose:
+            print(f"action: {action} score:{action_score}")
+
+        reward, done = env.step(action)
+        total_reward += reward
+        steps += 1
+
+        if done:
+            break
+
         reward, done = env.step(enemy.act(env.board))
         total_reward -= reward
         if done:
             break
 
-    if demo:
+    if verbose:
         print("env over" + "-" * 80)
         print(env)
         print(f"Reward: {total_reward}")
 
-    return total_reward, steps, transitions
+    return total_reward, steps
 
 
-def run_worker(model_path, episode_queue, board_shape, k, model_version):
+def wait_for_filename(filename):
+    while not os.path.exists(filename):
+        time.sleep(0.1)
+
+
+def run_rollout_worker(model_path, episode_queue, board_shape, k, model_version):
+    print(random.random())
     agent = NNAgent(board_shape)
     counter = 0
 
     last_demo = time.time()
 
-    while not os.path.exists(model_path):
-        time.sleep(0.1)
-
+    wait_for_filename(model_path)
     last_version = model_version.value
 
     while True:
@@ -127,12 +155,95 @@ def run_worker(model_path, episode_queue, board_shape, k, model_version):
         if now - last_demo > 30:
             demo = True
             last_demo = now
-        enemy_first = (counter % 2) == 1
-        rew, step, transitions = run_episode(
-            agent, demo, 10000, enemy_first, board_shape, k
-        )
-        episode_queue.put((rew, step, transitions))
+        transitions = run_episode(agent, demo, 10000, board_shape, k, not demo)
+        episode_queue.put(transitions)
         counter += 1
+
+
+def run_evaluator_worker(
+    model_path,
+    model_best_path,
+    evaluator_queue,
+    board_shape,
+    k,
+    model_version,
+    agent_name,
+):
+    agent = NNAgent(board_shape)
+    counter = 0
+
+    wait_for_filename(model_path)
+
+    last_version = model_version.value
+
+    running_average = -1
+    smoothing = 0.96
+
+    best_average = -1
+    best_version = 0
+
+    if agent_name == "better-greedy":
+        enemy_cls = agents.BetterGreedyAgent
+    elif agent_name == "best-greedy":
+        enemy_cls = agents.BestGreedyAgent
+    else:
+        raise RuntimeError(f"Unknown agent name {agent_name}")
+
+    while True:
+        next_version = model_version.value
+        if next_version != last_version:
+            agent.load_model(model_path)
+            last_version = next_version
+        all_rewards = []
+        all_steps = []
+        for _ in range(100):
+            enemy_first = (counter % 2) == 1
+            reward, steps = run_evaluation_episode(
+                agent,
+                agents.BetterGreedyAgent,
+                False,
+                10000,
+                enemy_first,
+                board_shape,
+                k,
+                False,
+            )
+            all_rewards.append(reward)
+            all_steps.append(steps)
+            counter += 1
+        all_rewards = np.mean(all_rewards)
+        all_steps = np.mean(all_steps)
+
+        running_average = running_average * smoothing + all_rewards * (1.0 - smoothing)
+        if running_average > best_average:
+            best_average = running_average
+            agent.save_model(model_best_path)
+            best_version = last_version
+
+        evaluator_queue.put(
+            {
+                "reward": all_rewards,
+                "steps": all_steps,
+                "running reward average": running_average,
+                "best average": best_average,
+                "best_version": best_version,
+            }
+        )
+
+
+class Evaluator:
+    def __init__(self, name):
+        self.queue = multiprocessing.Queue(1)
+        self.name = name
+        self.last_values = {}
+
+    def update(self):
+        try:
+            new_values = self.queue.get_nowait()
+        except queue.Empty:
+            return
+
+        self.last_values = new_values
 
 
 def train(episodes, name, experiment_dir, load_model):
@@ -153,19 +264,40 @@ def train(episodes, name, experiment_dir, load_model):
 
     model_dir = os.path.join(output_dir, "model_snapshots")
     model_path = os.path.join(model_dir, "model.npz")
-    model_best_path = os.path.join(model_dir, "model_best.npz")
     model_tmp_path = os.path.join(model_dir, "model.tmp.npz")
     os.makedirs(model_dir, exist_ok=True)
 
-    episode_queue = multiprocessing.Queue(1)
+    episode_queue = multiprocessing.Queue(8)
     model_version = 0
     model_version_shared = multiprocessing.Value("i", 0)
     for _ in range(4):
         worker = multiprocessing.Process(
-            target=run_worker,
+            target=run_rollout_worker,
             args=(model_path, episode_queue, board_shape, k, model_version_shared),
         )
         worker.start()
+
+    evaluators = []
+    for evaluator_name, agent_name in [
+        ("eval_better_greedy", "better-greedy"),
+        ("eval_best_greedy", "best-greedy"),
+    ]:
+        evaluator = Evaluator(evaluator_name)
+        model_best_path = os.path.join(model_dir, f"{evaluator_name}_best.npz")
+        worker = multiprocessing.Process(
+            target=run_evaluator_worker,
+            args=(
+                model_path,
+                model_best_path,
+                evaluator.queue,
+                board_shape,
+                k,
+                model_version_shared,
+                agent_name,
+            ),
+        )
+        worker.start()
+        evaluators.append(evaluator)
 
     agent = NNAgent(board_shape)
     agent.save_model(model_path)
@@ -187,10 +319,7 @@ def train(episodes, name, experiment_dir, load_model):
 
     batch_size = 1 << 12
 
-    reward_average = -1
-
     np.set_printoptions(threshold=100000)
-    smoothing = 0.96
 
     with open(os.path.join(output_dir, "episodes.txt"), "w") as output_log:
         try:
@@ -202,32 +331,21 @@ def train(episodes, name, experiment_dir, load_model):
                     output_dir, "ep_{:05d}.json.gz".format(i_episode)
                 )
 
-                total_rewards = []
-                steps = []
                 start = time.time()
                 for _ in range(30):
-                    rew, step, transitions = episode_queue.get()
-                    total_rewards.append(rew)
-                    steps.append(step)
+                    transitions = episode_queue.get()
                     for obs, next_obs, rew in transitions:
                         memory.add(obs, next_obs, rew)
-
-                episode_duration_per_step = (time.time() - start) / np.sum(steps)
-
-                total_reward = np.mean(total_rewards)
-                steps = np.mean(steps)
-
-                reward_average += (1 - smoothing) * (total_reward - reward_average)
 
                 agent.save_model(model_tmp_path)
                 os.rename(model_tmp_path, model_path)
                 model_version += 1
                 model_version_shared.value = model_version
 
-                if i_episode > 100 and reward_average > best_episode_reward:
-                    best_episode_reward = reward_average
-                    best_episode = i_episode
-                    shutil.copyfile(model_path, model_best_path)
+                # if i_episode > 100 and reward_average > best_episode_reward:
+                #     best_episode_reward = reward_average
+                #     best_episode = i_episode
+                #     shutil.copyfile(model_path, model_best_path)
 
                 start_learn = time.time()
                 if memory.size() >= 1024:
@@ -242,18 +360,19 @@ def train(episodes, name, experiment_dir, load_model):
                 metrics = {
                     "episode": i_episode,
                     "iteration duration": duration,
-                    "steps": steps,
-                    "reward": total_reward,
-                    "reward_average": reward_average,
                     "best episode reward": best_episode_reward,
                     "best episode number": best_episode,
                     "memory size": memory.size(),
                     "train step duration (ms)": learn_duration * 1000.0,
-                    "time per env step(ms)": episode_duration_per_step * 1000.0,
                     "rss (MB)": rss,
                 }
                 for key, val in train_metrics.items():
-                    metrics["train/" + key] = val
+                    metrics[f"train/{key}"] = val
+
+                for evaluator in evaluators:
+                    evaluator.update()
+                    for key, val in evaluator.last_values.items():
+                        metrics[f"{evaluator.name}/{key}"] = val
 
                 for key, val in metrics.items():
                     metrics[key] = str(val)
