@@ -314,9 +314,6 @@ def train(episodes, name, experiment_dir, load_model):
         print(f"Loading model from {filename}")
         agent.load_model(filename)
 
-    best_episode_reward = -1e9
-    best_episode = 0
-
     batch_size = 1 << 12
 
     np.set_printoptions(threshold=100000)
@@ -342,11 +339,6 @@ def train(episodes, name, experiment_dir, load_model):
                 model_version += 1
                 model_version_shared.value = model_version
 
-                # if i_episode > 100 and reward_average > best_episode_reward:
-                #     best_episode_reward = reward_average
-                #     best_episode = i_episode
-                #     shutil.copyfile(model_path, model_best_path)
-
                 start_learn = time.time()
                 if memory.size() >= 1024:
                     train_metrics = agent.train(memory, batch_size)
@@ -360,8 +352,6 @@ def train(episodes, name, experiment_dir, load_model):
                 metrics = {
                     "episode": i_episode,
                     "iteration duration": duration,
-                    "best episode reward": best_episode_reward,
-                    "best episode number": best_episode,
                     "memory size": memory.size(),
                     "train step duration (ms)": learn_duration * 1000.0,
                     "rss (MB)": rss,
